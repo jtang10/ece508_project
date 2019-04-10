@@ -59,7 +59,7 @@ def ktruss (inc_mat_file,k):
     startTime=time.clock()
     
     E=csr_matrix(( ii[:,2], (ii[:,0]-1, ii[:,1]-1)), shape=(max(ii[:,0]),max(ii[:,1])))
-    
+    print(E)
     readTime=time.clock()
     
     tmp=np.transpose(E)*E
@@ -71,7 +71,7 @@ def ktruss (inc_mat_file,k):
     #set_diag_val(tmp,0)
     tmp.eliminate_zeros()
     R= E * tmp
-    
+    print(R)
     s=lil_matrix(((R==2).astype(float)).sum(axis=1))
     xc= (s >=k-2).astype(int)
     

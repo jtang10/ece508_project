@@ -29,5 +29,22 @@ print("ktruss result: \n{}".format(E))
 # compatibility and np dtype issue
 ###################################################
 
-
+###################################################
+# The ktruss_example.tsv stores the coordinates of
+# the indidence matrix rather than the matrix
+# itself. The actual incidence matrix is 
+#                0  1  1  0
+#                1  1  0  0
+#                1  0  0  1
+#                0  0  1  1
+#                1  0  1  0
+# where rows mean edges and columns mean verticies
+# The graph looks like this (vertax is 1-indexed)
+#                  1-----2
+#                  | \   |
+#                  |  \  |
+#                  |   \ |
+#                  |    \|
+#                  4-----3        
+####################################################           
 
