@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <string>
+#include <vector>
 
 #include "edge_list.hpp"
 

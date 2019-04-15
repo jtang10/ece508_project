@@ -13,6 +13,8 @@
 #define DEVICE
 #endif
 
+template<typename Index>
+using Vector = std::vector<Index>;
 
 template <typename Index> class COO;
 

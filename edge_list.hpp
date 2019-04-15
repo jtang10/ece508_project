@@ -1,3 +1,4 @@
 #pragma once
 
-template <typename Index> class EdgeTy;
+template<typename Index>
+using EdgeTy = std::pair<Index, Index>;
