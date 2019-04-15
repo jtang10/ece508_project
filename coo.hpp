@@ -2,9 +2,8 @@
 
 #include <functional>
 
-#include "pangolin/dense/vector.hu"
-#include "pangolin/edge_list.hpp"
-#include "pangolin/types.hpp"
+#include "edge_list.hpp"
+#include <vector>
 
 #ifdef __CUDACC__
 #define HOST __host__
@@ -14,7 +13,6 @@
 #define DEVICE
 #endif
 
-namespace pangolin {
 
 template <typename Index> class COO;
 
@@ -90,8 +88,6 @@ public:
   HOST DEVICE const Index *device_col_ind() const { return colInd_.data(); } //!< column index array
   HOST DEVICE const Index *device_row_ind() const { return rowInd_.data(); } //<! row index array
 };
-
-} // namespace pangolin
 
 #undef HOST
 #undef DEVICE

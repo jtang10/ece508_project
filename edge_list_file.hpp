@@ -3,9 +3,7 @@
 #include <cassert>
 #include <string>
 
-#include "pangolin/edge_list.hpp"
-
-namespace pangolin {
+#include "edge_list.hpp"
 
 /*! check if base string ends with suffix string
 
@@ -163,5 +161,3 @@ public:
     return numRead;
   }
 };
-
-} // namespace pangolin

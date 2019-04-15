@@ -5,18 +5,16 @@
 #include "coo.hpp"
 
 #ifdef __CUDACC__
-#define PANGOLIN_HOST __host__
+#define HOST __host__
 #define DEVICE __device__
 #else
-#define PANGOLIN_HOST
+#define HOST
 #define DEVICE
 #endif
 
-namespace pangolin {
-
 template <typename Index> COO<Index>::COO() {}
 
-template <typename Index> PANGOLIN_HOST DEVICE uint64_t COO<Index>::num_rows() const {
+template <typename Index> HOST DEVICE uint64_t COO<Index>::num_rows() const {
   if (rowPtr_.size() == 0) {
     return 0;
   } else {
@@ -83,7 +81,6 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
   return coo;
 }
 
-} // namespace pangolin
 
-#undef PANGOLIN_HOST
+#undef HOST
 #undef DEVICE
