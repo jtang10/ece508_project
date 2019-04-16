@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <string>
+#include <cstring>
 #include <vector>
 
 #include "edge_list.hpp"
@@ -31,11 +32,11 @@ private:
 
   template <typename T> size_t read_bel(EdgeTy<T> *ptr, const size_t n) {
     if (fp_ == nullptr) {
-      LOG(error, "error reading {} or file was already closed ", path_);
+      // LOG(error, "error reading {} or file was already closed ", path_);
       return 0;
     }
     if (ptr == nullptr) {
-      LOG(error, "buffer is a nullptr");
+      // LOG(error, "buffer is a nullptr");
       return 0;
     }
     char *buf = new char[24 * n];
@@ -49,12 +50,12 @@ private:
       }
       // some error
       else if (ferror(fp_)) {
-        LOG(error, "Error while reading {}: {}", path_, strerror(errno));
+        // LOG(error, "Error while reading {}: {}", path_, strerror(errno));
         fclose(fp_);
         fp_ = nullptr;
         assert(0);
       } else {
-        LOG(error, "Unexpected error while reading {}", path_);
+        // LOG(error, "Unexpected error while reading {}", path_);
         assert(0);
       }
     }
@@ -64,7 +65,7 @@ private:
       std::memcpy(&dst, &buf[i * 24 + 0], 8);
       ptr[i].first = src;
       ptr[i].second = dst;
-      SPDLOG_TRACE(logger::console, "read {} -> {}", ptr[i].first, ptr[i].second);
+      // SPDLOG_TRACE(logger::console, "read {} -> {}", ptr[i].first, ptr[i].second);
     }
 
     // no characters extracted or parsing error
@@ -85,10 +86,10 @@ private:
         if (feof(fp_)) {
           return i;
         } else if (ferror(fp_)) {
-          LOG(error, "Error while reading {}: {}", path_, strerror(errno));
+          // LOG(error, "Error while reading {}: {}", path_, strerror(errno));
           return i;
         } else {
-          LOG(critical, "Unexpected error while reading {}", path_);
+          // LOG(critical, "Unexpected error while reading {}", path_);
           exit(-1);
         }
       }
@@ -106,19 +107,19 @@ public:
   EdgeListFile(const std::string &path //!< [in] the path of the file
                )
       : path_(path) {
-    LOG(debug, "EdgeListFile for \"{}\"", path_);
+    // LOG(debug, "EdgeListFile for \"{}\"", path_);
     if (endswith(path, ".bel")) {
       type_ = FileType::BEL;
     } else if (endswith(path, ".tsv")) {
       type_ = FileType::TSV;
     } else {
-      LOG(critical, "no reader for file {}", path);
+      // LOG(critical, "no reader for file {}", path);
       exit(-1);
     }
 
     fp_ = fopen(path_.c_str(), "r");
     if (nullptr == fp_) {
-      LOG(error, "unable to open \"{}\"", path_);
+      // LOG(error, "unable to open \"{}\"", path_);
     }
   }
 
@@ -140,7 +141,7 @@ public:
   get_edges(std::vector<EdgeTy<T>> &edges, //!< [out] the read edges. Resized to the number of successfully read edges
             const size_t n                 //!< [in] the number of edges to try to read
   ) {
-    SPDLOG_TRACE(logger::console, "requested {} edges", n);
+    // SPDLOG_TRACE(logger::console, "requested {} edges", n);
     edges.resize(n);
 
     size_t numRead;
@@ -154,7 +155,7 @@ public:
       break;
     }
     default: {
-      LOG(critical, "unexpected file type");
+      // LOG(critical, "unexpected file type");
       exit(-1);
     }
     }
