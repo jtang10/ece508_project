@@ -48,7 +48,7 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
   COO<Index> coo;
 
   if (begin == end) {
-    LOG(warn, "constructing from empty edge sequence");
+    // LOG(warn, "constructing from empty edge sequence");
     return coo;
   }
 
@@ -80,6 +80,18 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
   assert(coo.rowInd_.size() == coo.colInd_.size());
   return coo;
 }
+
+template<typename Index>
+ COOView<Index> COO<Index>::view() const {
+     COOView<Index> view;
+     view.nnz_ = nnz();
+     view.num_rows_ = num_rows();
+     view.rowPtr_ = rowPtr_.data();
+     view.colInd_ = colInd_.data();
+     view.rowInd_ = rowInd_.data();
+     return view;
+ }
+ 
 
 
 #undef HOST

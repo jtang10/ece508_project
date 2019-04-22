@@ -1,5 +1,12 @@
-Things to add in this repo:
-- [ ] serial code from [static graph challenge](https://github.com/graphchallenge/GraphChallenge/tree/master/SubgraphIsomorphism)
-- [ ] graph dataset download, conversion, etc code provide by [Carl](https://github.com/cwpearson/graph-datasets/tree/master/tools)
-- [ ] potentially importing triangle counting lab into this repo to efficiently enable the resue of testing and Pangolin.
+Current status:
+- [x] Scripts to convert data and read file (Jingning).
+- [x] Initial CPU code (Jingning).
+- [ ] Initial GPU code (Venkat).
+- [ ] Start optimization (right after final exam).
+
+test1.tsv and test2.tsv are toy example to test the functionality of the CPU code. Convert them to bel file before using.
+* test1 is from the graphChallengeSerial code (see the comments in runKtrussBenchmark.py).
+* test2 is from the lecture slides.
+
+
 
