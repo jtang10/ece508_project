@@ -1,7 +1,7 @@
 #pragma once
 
 #include <set>
-
+#include <cassert>
 #include "coo.hpp"
 
 #ifdef __CUDACC__
@@ -14,7 +14,7 @@
 
 template <typename Index> COO<Index>::COO() {}
 
-template <typename Index> HOST DEVICE uint64_t COO<Index>::num_rows() const {
+template <typename Index> HOST uint64_t COO<Index>::num_rows() const {
   if (rowPtr_.size() == 0) {
     return 0;
   } else {
@@ -48,7 +48,6 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
   COO<Index> coo;
 
   if (begin == end) {
-    // LOG(warn, "constructing from empty edge sequence");
     return coo;
   }
 

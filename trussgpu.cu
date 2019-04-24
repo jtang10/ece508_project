@@ -1,12 +1,9 @@
-#include "coo.hpp"
+#include "coo-impl.hpp"
+#include <iostream>
+#include "modifiedfilereader.cpp"
 #define NUM_BLOCKS 4
 __device__ uint64_t triangles_buffer_offset=0;
-__device__ void triangle_count(COOView<int> graph, int* triangles_count) {
-	int* edgeDsts=graph.col_ind();
-	int* rowPtrs=graph.row_ptr();
-	int* edgeSrcs=graph.row_ind();
-	uint64_t num_rows=graph.num_rows();
-	uint64_t num_edges=graph.nnz();
+__global__ void triangle_count(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint64_t num_rows, uint64_t num_edges, int* triangles_count) {
 	int tid=blockIdx.x*blockDim.x+threadIdx.x;
 	for (int i=tid;i<num_edges;i+=blockDim.x*NUM_BLOCKS) {
 		int i_src=0;
@@ -32,12 +29,7 @@ __device__ void triangle_count(COOView<int> graph, int* triangles_count) {
 		}
 	}
 }
-__device__ void triangle_write(COOView<int> graph, int* triangles_buffer, int* triangles_offsets) {
-	int* edgeDsts=graph.col_ind();
-	int* rowPtrs=graph.row_ptr();
-	int* edgeSrcs=graph.row_ind();
-	uint64_t num_rows=graph.num_rows();
-	uint64_t num_edges=graph.nnz();
+__global__ void triangle_write(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint64_t num_rows, uint64_t num_edges, int* triangles_buffer, int* triangles_offsets) {
 	int tid=blockIdx.x*blockDim.x+threadIdx.x;
 	for (int i=tid;i<num_edges;i+=blockDim.x*NUM_BLOCKS) {
 		int i_src=0;
@@ -58,19 +50,13 @@ __device__ void triangle_write(COOView<int> graph, int* triangles_buffer, int* t
 					++i_dst;
 					triangles_buffer[triangle_offset]=rowPtrs[edgeSrcs[i]]+i_src;
 					triangles_buffer[triangle_offset+1]=rowPtrs[edgeDsts[i]]+i_dst;
-					++triangle_offset;
-					//add to set of triangles for this edge
+					triangle_offset+=2;
 				}
 			}
 		}
 	}
 }
-__device__ void truss_decomposition(COOView<int> graph,int* triangle_counts, int* triangles_offsets, int* triangles_buffer,int* edge_exists, int* new_deletes, int k) {
-	int* edgeDsts=graph.col_ind();
-	int* rowPtrs=graph.row_ptr();
-	int* edgeSrcs=graph.row_ind();
-	uint64_t num_rows=graph.num_rows();
-	uint64_t num_edges=graph.nnz();
+__global__ void truss_decomposition(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint64_t num_rows, uint64_t num_edges,int* triangles_counts, int* triangles_offsets, int* triangles_buffer,int* edge_exists, int* new_deletes, int k) {
 	int tid=blockIdx.x*blockDim.x+threadIdx.x;
 	int local_edge_exists=0, local_new_deletes=0;
 	for (int i=tid;i<num_edges;i+=blockDim.x*NUM_BLOCKS) {
@@ -101,7 +87,7 @@ __device__ void truss_decomposition(COOView<int> graph,int* triangle_counts, int
 				atomicAdd(&triangles_counts[e2],-1);
 			}
 		}
-		else {
+		else if(tricount>0) {
 			local_edge_exists=1;
 		}
 	}
@@ -110,19 +96,72 @@ __device__ void truss_decomposition(COOView<int> graph,int* triangle_counts, int
 }
 
 void truss_wrapper(COOView<int> graph) {
+	int numThreadsPerBlock=128;
+	const int* edgeDsts=graph.col_ind();
+	const int* rowPtrs=graph.row_ptr();
+	const int* edgeSrcs=graph.row_ind();
+	uint64_t num_rows=graph.num_rows();
+	uint64_t num_edges=graph.nnz();
+	int* edgeDsts_d=nullptr;
+	int* rowPtrs_d=nullptr;
+	int* edgeSrcs_d=nullptr;
+	int* triangles_count=nullptr;
 	//allocate necessary memory
+	cudaMalloc(&edgeDsts_d,num_edges*sizeof(int));
+	cudaMalloc(&rowPtrs_d,(num_rows+1)*sizeof(int));
+	cudaMalloc(&edgeSrcs_d,num_edges*sizeof(int));
+	cudaMallocManaged(&triangles_count,num_edges*sizeof(int));
+	//copy over data
+	cudaMemcpy(edgeDsts_d, edgeDsts, num_edges*sizeof(int),cudaMemcpyHostToDevice);
+	cudaMemcpy(rowPtrs_d, rowPtrs, (num_rows+1)*sizeof(int),cudaMemcpyHostToDevice);
+	cudaMemcpy(edgeSrcs_d, edgeSrcs, num_edges*sizeof(int),cudaMemcpyHostToDevice);
 	//call triangle_count
+	triangle_count<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d,edgeSrcs_d,num_rows,num_edges,triangles_count);
+	cudaDeviceSynchronize();
 	//allocate necessary memory
-	//call triangle_write
-	int k=2;
-	int edge_exists=1;
-	int new_deletes=0;
-	while (edge_exists) {
-		if (new_deletes==0) {
-			//output current graph as k-truss subgraph
-		}
-		edge_exists=0;
-		new_deletes=0;
-		//call truss_decomposition here
+	int* triangles_buffer=nullptr;
+	int* triangles_offsets=nullptr;
+	cudaMallocManaged(&triangles_offsets,(num_edges+1)*sizeof(int));
+	int start=0;
+	for (int i=0;i!=num_edges;++i) {
+		triangles_offsets[i]=start;
+		start+=2*triangles_count[i];
 	}
+	triangles_offsets[num_edges]=start;
+	cudaMallocManaged(&triangles_buffer,(triangles_offsets[num_edges])*sizeof(int));
+	//call triangle_write
+	triangle_write<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_buffer, triangles_offsets);
+	cudaDeviceSynchronize();
+	int* edge_exists_ptr=nullptr;
+	int* new_deletes_ptr=nullptr;
+	int k=2;
+	cudaMallocManaged(&edge_exists_ptr,sizeof(int));
+	cudaMallocManaged(&new_deletes_ptr,sizeof(int));
+	*edge_exists_ptr=1;
+	*new_deletes_ptr=0;
+	while (*edge_exists_ptr) {
+		if (*new_deletes_ptr==0) {
+			//output current graph as k-truss subgraph
+			++k;
+		}
+		*edge_exists_ptr=0;
+		*new_deletes_ptr=0;
+		truss_decomposition<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d, rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_count, triangles_offsets, triangles_buffer, edge_exists_ptr, new_deletes_ptr, k);
+		cudaDeviceSynchronize();
+	}
+	cudaFree(edgeDsts_d);
+	cudaFree(rowPtrs_d);
+	cudaFree(edgeSrcs_d);
+	cudaFree(triangles_count);
+	cudaFree(triangles_offsets);
+	cudaFree(triangles_buffer);
+	cudaFree(edge_exists_ptr);
+	cudaFree(new_deletes_ptr);
+}
+int main() {
+	std::vector<std::pair<int,int>> edgetemp;
+	EdgeListFile elf("Test.bel");
+	elf.get_edges(edgetemp,4);
+	COO<int> graph=COO<int>::from_edges(edgetemp.begin(),edgetemp.end());
+	truss_wrapper(graph.view());
 }

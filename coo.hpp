@@ -36,8 +36,8 @@ public:
   const Index *rowInd_; //!< non-zero row indices
   const Index *colInd_; //!< non-zero column indices
 
-  HOST DEVICE uint64_t nnz() const { return nnz_; }
-  HOST DEVICE uint64_t num_rows() const { return num_rows_; }
+  HOST uint64_t nnz() const { return nnz_; }
+  HOST uint64_t num_rows() const { return num_rows_; }
 
   const Index *row_ptr() const { return rowPtr_; }                    //!< row offset array
   const Index *col_ind() const { return colInd_; }                    //!< column index array
@@ -63,12 +63,12 @@ public:
   Vector<Index> rowPtr_; //!< offset in col_ that each row starts at
   Vector<Index> colInd_; //!< non-zero column indices
   Vector<Index> rowInd_; //!< non-zero row indices
-  HOST DEVICE uint64_t nnz() const {
+  HOST uint64_t nnz() const {
     assert(colInd_.size() == rowInd_.size());
     return colInd_.size();
   }                                      //!< number of non-zeros
   uint64_t num_nodes() const;            //!< number of unique row/col indices
-  HOST DEVICE uint64_t num_rows() const; //!< number of matrix rows
+  HOST uint64_t num_rows() const; //!< number of matrix rows
 
 
   /*! Build a COO from a sequence of edges
