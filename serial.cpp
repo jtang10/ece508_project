@@ -4,6 +4,7 @@
 #include "util.cpp"
 #include "edge_list_file.hpp"
 #include "coo-impl.hpp"
+#include <chrono>
 
 using namespace std;
 
@@ -94,18 +95,36 @@ void truss_decomposition(vector<int> &triangleCount,
                          const int* edgeDst,
                          const int* rowPtr,
                          int numEdges,
-                         int k
+                         int &k
 ) { 
+    int numRemoved = 0;
     bool removeFlag [numEdges] = {false};
-    for (int i = 0; i < numEdges; ++i) {
-        cout << removeFlag[i] << ' ';
-    }
-    cout << endl;
-    for (int i = 0; i < numEdges; ++i) {
-        if (triangleCount[i] < k-2) {
-            // label the edge to be removed and update the triangleList and triangleCount.
-            removeFlag[i] = true;
-            update_triangle(triangleCount, triangleList, i);
+
+    // for (int i = 0; i < numEdges; ++i) {
+    //     cout << removeFlag[i] << ' ';
+    // }
+    // cout << endl;
+
+    while (numRemoved < numEdges) {
+        for (int i = 0; i < numEdges; ++i) {
+            if (triangleCount[i] < k-2) {
+                // label the edge to be removed and update the triangleList and triangleCount.
+                removeFlag[i] = true;
+                numRemoved++;
+                update_triangle(triangleCount, triangleList, i);
+            }
+        }
+
+        cout << "k=" << k << ": ";
+        for (int i = 0; i < numEdges; ++i) {
+            cout << removeFlag[i] << ' ';
+        }
+        cout << endl;
+        if (numRemoved == numEdges) {
+            k--;
+            break;
+        } else {
+            k++;
         }
     }
     
@@ -115,15 +134,10 @@ void truss_decomposition(vector<int> &triangleCount,
 
     //     }
     // }
-
-    for (int i = 0; i < numEdges; ++i) {
-        cout << removeFlag[i] << ' ';
-    }
-    cout << endl;
 }
 
 int main(int argc, char * argv[]) {
-    string test_filename("./data/test1.bel");
+    string test_filename("./data/test2.bel");
     EdgeListFile test_file(test_filename);
 
     // get the total number of edges in the file.
@@ -145,12 +159,16 @@ int main(int argc, char * argv[]) {
     vector<int> triangleCount(numEdges);  // keep track of the number of triangles for each edge
     vector<vector<pair<int, int>>> triangleList(numEdges); // keep track of the triangle edges for each edge
     bool *remove;
+
+    chrono::steady_clock::time_point begin = chrono::steady_clock::now();
     triangle_count(triangleCount,
                    triangleList,
                    test_view.row_ind(),
                    test_view.col_ind(),
                    test_view.row_ptr(),
                    numEdges);
+    chrono::steady_clock::time_point end= chrono::steady_clock::now();
+    cout << "Triangle count time = " << chrono::duration_cast<chrono::nanoseconds> (end - begin).count() << " ns" << std::endl;
 
     cout << "Triangle Count" << endl;
     for (int i = 0; i < numEdges; i++) {
@@ -162,13 +180,17 @@ int main(int argc, char * argv[]) {
     }
     cout << endl;
 
+    int k = 3;
+    begin = chrono::steady_clock::now();
     truss_decomposition(triangleCount,
                         triangleList,
                         test_view.row_ind(),
                         test_view.col_ind(),
                         test_view.row_ptr(),
                         numEdges,
-                        3);
+                        k);
+    end= chrono::steady_clock::now();                    
+    cout << "Truss decomposition time = " << chrono::duration_cast<chrono::nanoseconds> (end - begin).count() << " ns" << std::endl;
 
     cout << "Triangle Count" << endl;
     for (int i = 0; i < numEdges; i++) {
@@ -179,6 +201,7 @@ int main(int argc, char * argv[]) {
         cout << endl;
     }
     cout << endl;
+    cout << "max k = " << k << endl;
 
     // cout << "Number of rows in the COO: " << coo_test.num_rows() << endl;
     // cout << "Number of non-zero rows in the COO: " << coo_test.nnz() << endl;

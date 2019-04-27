@@ -3,14 +3,18 @@
 #include "modifiedfilereader.cpp"
 #define NUM_BLOCKS 4
 __device__ uint64_t triangles_buffer_offset=0;
+
+/*
+ * Count triangle on each edge, store only on the lowest edge.
+ */
 __global__ void triangle_count(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint64_t num_rows, uint64_t num_edges, int* triangles_count) {
 	int tid=blockIdx.x*blockDim.x+threadIdx.x;
-	for (int i=tid;i<num_edges;i+=blockDim.x*NUM_BLOCKS) {
-		int i_src=0;
-		int i_dst=0;
-		int srcSize=rowPtrs[edgeSrcs[i]+1]-rowPtrs[edgeSrcs[i]];
-		int destSize=rowPtrs[edgeDsts[i]+1]-rowPtrs[edgeDsts[i]];
-		if (edgeSrcs[i]>edgeDsts[i]) {
+	if (tid < num_edges) {
+		for (int i=tid;i<num_edges;i+=blockDim.x*NUM_BLOCKS) {
+			int i_src=0;
+			int i_dst=0;
+			int srcSize=rowPtrs[edgeSrcs[i]+1]-rowPtrs[edgeSrcs[i]];
+			int destSize=rowPtrs[edgeDsts[i]+1]-rowPtrs[edgeDsts[i]];
 			int tricount=0;
 			while (i_src<srcSize&&i_dst<destSize) {
 				if (edgeDsts[rowPtrs[edgeSrcs[i]]+i_src]<edgeDsts[rowPtrs[edgeDsts[i]]+i_dst]) {
@@ -37,21 +41,19 @@ __global__ void triangle_write(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint6
 		int srcSize=rowPtrs[edgeSrcs[i]+1]-rowPtrs[edgeSrcs[i]];
 		int destSize=rowPtrs[edgeDsts[i]+1]-rowPtrs[edgeDsts[i]];
 		int triangle_offset=triangles_offsets[i];
-		if (edgeSrcs[i]>edgeDsts[i]) {
-			while (i_src<srcSize&&i_dst<destSize) {
-				if (edgeDsts[rowPtrs[edgeSrcs[i]]+i_src]<edgeDsts[rowPtrs[edgeDsts[i]]+i_dst]) {
-					++i_src;
-				}
-				else if (edgeDsts[rowPtrs[edgeSrcs[i]]+i_src]>edgeDsts[rowPtrs[edgeDsts[i]]+i_dst]) {
-					++i_dst;
-				}
-				else {
-					++i_src;
-					++i_dst;
-					triangles_buffer[triangle_offset]=rowPtrs[edgeSrcs[i]]+i_src;
-					triangles_buffer[triangle_offset+1]=rowPtrs[edgeDsts[i]]+i_dst;
-					triangle_offset+=2;
-				}
+		while (i_src<srcSize&&i_dst<destSize) {
+			if (edgeDsts[rowPtrs[edgeSrcs[i]]+i_src]<edgeDsts[rowPtrs[edgeDsts[i]]+i_dst]) {
+				++i_src;
+			}
+			else if (edgeDsts[rowPtrs[edgeSrcs[i]]+i_src]>edgeDsts[rowPtrs[edgeDsts[i]]+i_dst]) {
+				++i_dst;
+			}
+			else {
+				++i_src;
+				++i_dst;
+				triangles_buffer[triangle_offset]=rowPtrs[edgeSrcs[i]]+i_src;
+				triangles_buffer[triangle_offset+1]=rowPtrs[edgeDsts[i]]+i_dst;
+				triangle_offset+=2;
 			}
 		}
 	}
@@ -102,10 +104,23 @@ void truss_wrapper(COOView<int> graph) {
 	const int* edgeSrcs=graph.row_ind();
 	uint64_t num_rows=graph.num_rows();
 	uint64_t num_edges=graph.nnz();
+
+	std::cout << "Edge List" << std::endl;
+	for (int i = 0; i < num_edges; ++i) {
+		std::cout << edgeSrcs[i] << ' ' << edgeDsts[i] << std::endl;;
+	}
+	
+	std::cout << "Row Pointer" << std::endl;
+	for (int i = 0; i < num_rows+1; ++i) {
+		std::cout << rowPtrs[i] << ' ';
+	}
+	std::cout << std::endl;
+
 	int* edgeDsts_d=nullptr;
 	int* rowPtrs_d=nullptr;
 	int* edgeSrcs_d=nullptr;
 	int* triangles_count=nullptr;
+
 	//allocate necessary memory
 	cudaMalloc(&edgeDsts_d,num_edges*sizeof(int));
 	cudaMalloc(&rowPtrs_d,(num_rows+1)*sizeof(int));
@@ -118,6 +133,11 @@ void truss_wrapper(COOView<int> graph) {
 	//call triangle_count
 	triangle_count<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d,edgeSrcs_d,num_rows,num_edges,triangles_count);
 	cudaDeviceSynchronize();
+	std::cout << "Triangle Count" << std::endl;
+	for (int i = 0; i < num_edges; ++i) {
+		std::cout << triangles_count[i] << ' ';
+	}
+	std::cout << std::endl;
 	//allocate necessary memory
 	int* triangles_buffer=nullptr;
 	int* triangles_offsets=nullptr;
@@ -132,6 +152,20 @@ void truss_wrapper(COOView<int> graph) {
 	//call triangle_write
 	triangle_write<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_buffer, triangles_offsets);
 	cudaDeviceSynchronize();
+
+	std::cout << "Triangle Write" << std::endl;
+	std::cout << "triangles_buffer" << std::endl;
+	for (int i = 0; i < triangles_offsets[num_edges]; ++i) {
+		std::cout << triangles_buffer[i] << ' ';
+	}
+	std::cout << std::endl;
+
+	std::cout << "triangles_offsets" << std::endl;
+	for (int i = 0; i < triangles_offsets[num_edges]; ++i) {
+		std::cout << triangles_offsets[i] << ' ';
+	}
+	std::cout << std::endl;
+
 	int* edge_exists_ptr=nullptr;
 	int* new_deletes_ptr=nullptr;
 	int k=2;
@@ -160,8 +194,8 @@ void truss_wrapper(COOView<int> graph) {
 }
 int main() {
 	std::vector<std::pair<int,int>> edgetemp;
-	EdgeListFile elf("Test.bel");
-	elf.get_edges(edgetemp,4);
+	EdgeListFile elf("./data/test2.bel");
+	elf.get_edges(edgetemp,8);
 	COO<int> graph=COO<int>::from_edges(edgetemp.begin(),edgetemp.end());
 	truss_wrapper(graph.view());
 }
