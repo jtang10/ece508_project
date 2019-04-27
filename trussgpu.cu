@@ -58,6 +58,23 @@ __global__ void triangle_write(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint6
 		}
 	}
 }
+__global__ void triangle_scan(uint64_t num_edges, int* triangles_count, int* triangles_offsets) {
+	int tid=threadIdx.x;
+	int offset=1;
+	for (int i=tid;i<num_edges;i+=blockDim.x) {
+		triangles_offsets[i+1]=2*triangles_count[i];
+	}
+	__syncthreads();
+	while (offset<num_edges) {
+		for (int i=tid;i<num_edges;i+=blockDim.x) {
+			if (i+offset<num_edges) {
+				triangles_offsets[i+offset+1]+=triangles_offsets[i+1];
+			}
+		}
+		offset*=2;
+		__syncthreads();
+	}
+}
 __global__ void truss_decomposition(int* edgeDsts, int* rowPtrs, int* edgeSrcs, uint64_t num_rows, uint64_t num_edges,int* triangles_counts, int* triangles_offsets, int* triangles_buffer,int* edge_exists, int* new_deletes, int k) {
 	int tid=blockIdx.x*blockDim.x+threadIdx.x;
 	int local_edge_exists=0, local_new_deletes=0;
@@ -142,12 +159,13 @@ void truss_wrapper(COOView<int> graph) {
 	int* triangles_buffer=nullptr;
 	int* triangles_offsets=nullptr;
 	cudaMallocManaged(&triangles_offsets,(num_edges+1)*sizeof(int));
-	int start=0;
+	triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
+	/*int start=0;
 	for (int i=0;i!=num_edges;++i) {
 		triangles_offsets[i]=start;
 		start+=2*triangles_count[i];
 	}
-	triangles_offsets[num_edges]=start;
+	triangles_offsets[num_edges]=start;*/
 	cudaMallocManaged(&triangles_buffer,(triangles_offsets[num_edges])*sizeof(int));
 	//call triangle_write
 	triangle_write<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_buffer, triangles_offsets);
@@ -176,6 +194,7 @@ void truss_wrapper(COOView<int> graph) {
 	while (*edge_exists_ptr) {
 		if (*new_deletes_ptr==0) {
 			//output current graph as k-truss subgraph
+			//perform stream compaction here
 			++k;
 		}
 		*edge_exists_ptr=0;
