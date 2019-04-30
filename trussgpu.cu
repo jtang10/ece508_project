@@ -1,8 +1,29 @@
 #include "coo-impl.hpp"
 #include <iostream>
 #include "modifiedfilereader.cpp"
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/copy.h>
 #define NUM_BLOCKS 4
 __device__ uint64_t triangles_buffer_offset=0;
+
+struct is_positive
+{
+    __host__ __device__
+        bool operator()(int x)
+    {
+        return (x > 0);
+    }
+};
+
+struct is_not_m1
+{
+    __host__ __device__
+        bool operator()(int x)
+    {
+        return (x != -1);
+    }
+};
 
 /*
  * Count triangle on each edge, store only on the lowest edge.
@@ -194,7 +215,20 @@ void truss_wrapper(COOView<int> graph) {
 	while (*edge_exists_ptr) {
 		if (*new_deletes_ptr==0) {
 			//output current graph as k-truss subgraph
+			//remove edges from graph
+			//adjust num_edges here
 			//perform stream compaction here
+			int old_num_edges=0;
+			thrust::device_vector<int> tricounts(num_edges);
+			auto result_end=thrust::copy_if(triangles_count,triangles_count+old_num_edges,tricounts.begin(),is_positive());
+			thrust::copy(tricounts.begin(),result_end,triangles_count);
+			triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
+			cudaDeviceSynchronize();
+			int newtricountsum=thrust::reduce(triangles_count,triangles_count+num_edges);
+			//
+			thrust::device_vector<int> tribuffer((newtricountsum+1)*2);
+			auto result_bend=thrust::copy_if(triangles_buffer,triangles_buffer+((old_num_edges+1)*2),tribuffer.begin(),is_not_m1());
+			thrust::copy(tribuffer.begin(),tribuffer.end(),triangles_buffer);
 			++k;
 		}
 		*edge_exists_ptr=0;
