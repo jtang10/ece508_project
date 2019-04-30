@@ -19,7 +19,7 @@ parser.add_argument("to", choices=["bel", "tsv"], help="convert to this output t
 parser.add_argument('-f', "--force", action="store_true", help="overwrite output file")
 parser.add_argument('-s', "--skip", action="store_true", help="skip converting files where the output already exists")
 parser.add_argument("--dry-run", action="store_true", help="don't create any output files")
-parser.add_argument("--out-prefix", type=str, help="prefix for converted files", default="")
+parser.add_argument("-o", "--out-prefix", type=str, help="prefix for converted files", default="")
 
 args = parser.parse_args()
 
