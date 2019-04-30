@@ -65,11 +65,11 @@ void triangle_count(vector<int> &triangleCount,
         u = edgeSrc[i];
         v = edgeDst[i];
 
-        u_ptr = rowPtr[u];
-        v_ptr = rowPtr[v];
+        u_ptr = rowPtr[u-1];
+        v_ptr = rowPtr[v-1];
 
-        u_end = rowPtr[u+1];
-        v_end = rowPtr[v+1];
+        u_end = rowPtr[u];
+        v_end = rowPtr[v];
 
         w1 = edgeDst[u_ptr];
         w2 = edgeDst[v_ptr];
