@@ -36,11 +36,11 @@ int update_triangle(vector<int> &triangleCount,
 
             list2->erase(remove(list2->begin(), list2->end(), pair2), list2->end());
             triangleCount[edge2]--;
-            numRemoved++;
         }
 
         // clear its own triangles at the last.
         triangleList[originEdge].clear();
+        numRemoved += triangleCount[originEdge];
         triangleCount[originEdge] = 0;
     }
 
@@ -105,59 +105,65 @@ int truss_decomposition(vector<int> &triangleCount,
     int k = 3;
     int numRemoved = 0;
     int removeFlag [numEdges] = {0};  // 0 means present; 1 means will be removed; 2 means already removed
+    bool flag = true;
 
-    while (numRemoved < numEdges) {
-        for (int i = 0; i < numEdges; ++i) {
-            // if the edge is not removed yet and has less triangles than k-2,
-            // label the edge to be removed and update the triangleList and triangleCount later.
-            if (removeFlag[i]==0 && triangleCount[i]<(k-2)) {
-                removeFlag[i] = 1;
-                numRemoved++;
-            }
-        }
-
-        if (DEBUG) {
-            cout << endl << "k=" << k << ": ";
+    while (totalCount) {
+        while (flag) {
+            flag = false;
             for (int i = 0; i < numEdges; ++i) {
-                cout << removeFlag[i] << ' ';
+                // if the edge is not removed yet and has less triangles than k-2,
+                // label the edge to be removed and update the triangleList and triangleCount later.
+                if (removeFlag[i]==0 && triangleCount[i]<(k-2)) {
+                    removeFlag[i] = 1;
+                    numRemoved++;
+                    flag = true;
+                }
             }
-            cout << endl;
 
-            cout << "Before" << endl;
-            for (int i = 0; i < numEdges; i++) {
-                cout << i+1 << ": " << triangleCount[i] << '\t'; 
-                for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
-                    cout << it->first+1 << ':' << it->second+1 << '\t';
+            if (DEBUG) {
+                cout << endl << "k=" << k << ": ";
+                for (int i = 0; i < numEdges; ++i) {
+                    cout << removeFlag[i] << ' ';
                 }
                 cout << endl;
-            }
-            cout << "totalCount: " << totalCount << endl;
-            cout << "k=" << k << "; " << "numRemoved: " << numRemoved << endl;
-        }
 
-        for (int i = 0; i < numEdges; ++i) {
-            if (removeFlag[i] == 1) {	
-                totalCount -= update_triangle(triangleCount, triangleList, i);
-                removeFlag[i] = 2;
-            }
-        }
-
-        if (DEBUG) {
-            cout << "After" << endl;
-            for (int i = 0; i < numEdges; i++) {
-                cout << i+1 << ": " << triangleCount[i] << '\t'; 
-                for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
-                    cout << it->first+1 << ':' << it->second+1 << '\t';
+                cout << "Before" << endl;
+                for (int i = 0; i < numEdges; i++) {
+                    cout << i+1 << ": " << triangleCount[i] << '\t'; 
+                    for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
+                        cout << it->first+1 << ':' << it->second+1 << '\t';
+                    }
+                    cout << endl;
                 }
-                cout << endl;
+                cout << "totalCount: " << totalCount << endl;
+                cout << "k=" << k << "; " << "numRemoved: " << numRemoved << endl;
             }
-            cout << "totalCount: " << totalCount << endl;
+
+            for (int i = 0; i < numEdges; ++i) {
+                if (removeFlag[i] == 1) {	
+                    totalCount -= update_triangle(triangleCount, triangleList, i);
+                    removeFlag[i] = 2;
+                }
+            }
+
+            if (DEBUG) {
+                cout << "After" << endl;
+                for (int i = 0; i < numEdges; i++) {
+                    cout << i+1 << ": " << triangleCount[i] << '\t'; 
+                    for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
+                        cout << it->first+1 << ':' << it->second+1 << '\t';
+                    }
+                    cout << endl;
+                }
+                cout << "totalCount: " << totalCount << endl;
+            }
         }
 
         if (totalCount) {
             k++;
+            flag = true;
         } else {
-            k--;
+            k--;  // everything is removed in this round, this k won't count so decrement
             break;
         }
     }
