@@ -224,7 +224,7 @@ void truss_wrapper(COOView<int> graph) {
 			thrust::device_ptr<int> triangles_offsets_d(triangles_offsets);
 			auto result_end=thrust::copy_if(triangles_count_d,triangles_count_d+old_num_edges,tricounts.begin(),is_positive());
 			thrust::copy(tricounts.begin(),result_end,triangles_count_d);
-			triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count_d,triangles_offsets_d);
+			triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
 			cudaDeviceSynchronize();
 			int newtricountsum=thrust::reduce(triangles_count_d,triangles_count_d+num_edges);
 			//
