@@ -46,7 +46,7 @@ template <typename Index>
 template <typename EdgeIter>
 COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bool(EdgeTy<Index>)> f) {
   COO<Index> coo;
-
+  int maxseen=0;
   if (begin == end) {
     return coo;
   }
@@ -55,7 +55,9 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
     EdgeTy<Index> edge = *ei;
     const Index src = edge.first;
     const Index dst = edge.second;
-
+    if (dst>maxseen) {
+      maxseen=dst;
+    }
     // edge has a new src and should be in a new row
     // even if the edge is filtered out, we need to add empty rows
     while (coo.rowPtr_.size() != size_t(src + 1)) {
@@ -63,6 +65,9 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
       // as big as the current largest row we have recored
       assert(src >= coo.rowPtr_.size() && "are edges not ordered by source?");
       coo.rowPtr_.push_back(coo.colInd_.size());
+      while(coo.rowPtr_.size()<maxseen+2) {
+        coo.rowPtr_.push_back(coo.colInd_.size());
+      }
     }
 
     if (f(edge)) {
