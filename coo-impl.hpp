@@ -46,7 +46,6 @@ template <typename Index>
 template <typename EdgeIter>
 COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bool(EdgeTy<Index>)> f) {
   COO<Index> coo;
-
   if (begin == end) {
     return coo;
   }
@@ -55,7 +54,6 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
     EdgeTy<Index> edge = *ei;
     const Index src = edge.first;
     const Index dst = edge.second;
-
     // edge has a new src and should be in a new row
     // even if the edge is filtered out, we need to add empty rows
     while (coo.rowPtr_.size() != size_t(src + 1)) {
@@ -69,7 +67,7 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
       coo.rowInd_.push_back(src);
       coo.colInd_.push_back(dst);
     } else {
-      continue;
+      continue; 
     }
   }
 
