@@ -220,15 +220,18 @@ void truss_wrapper(COOView<int> graph) {
 			//perform stream compaction here
 			int old_num_edges=0;
 			thrust::device_vector<int> tricounts(num_edges);
-			auto result_end=thrust::copy_if(triangles_count,triangles_count+old_num_edges,tricounts.begin(),is_positive());
-			thrust::copy(tricounts.begin(),result_end,triangles_count);
+			thrust::device_ptr<int> triangles_count_d(triangles_count);
+			thrust::device_ptr<int> triangles_offsets_d(triangles_offsets);
+			auto result_end=thrust::copy_if(triangles_count_d,triangles_count_d+old_num_edges,tricounts.begin(),is_positive());
+			thrust::copy(tricounts.begin(),result_end,triangles_count_d);
 			triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
 			cudaDeviceSynchronize();
-			int newtricountsum=thrust::reduce(triangles_count,triangles_count+num_edges);
+			int newtricountsum=thrust::reduce(triangles_count_d,triangles_count_d+num_edges);
 			//
 			thrust::device_vector<int> tribuffer((newtricountsum+1)*2);
-			auto result_bend=thrust::copy_if(triangles_buffer,triangles_buffer+((old_num_edges+1)*2),tribuffer.begin(),is_not_m1());
-			thrust::copy(tribuffer.begin(),tribuffer.end(),triangles_buffer);
+			thrust::device_ptr<int> triangles_buffer_d(triangles_buffer);
+			auto result_bend=thrust::copy_if(triangles_buffer_d,triangles_buffer_d+((old_num_edges+1)*2),tribuffer.begin(),is_not_m1());
+			thrust::copy(tribuffer.begin(),tribuffer.end(),triangles_buffer_d);
 			++k;
 		}
 		*edge_exists_ptr=0;
