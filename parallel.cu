@@ -8,6 +8,7 @@
 #include <chrono>
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
+#include <thrust/copy.h>
 #include <utility>
 #include <iostream> 
 
@@ -41,11 +42,11 @@ __global__ static void count_triangle(int32_t *triangleCount, //!< per-edge tria
       } else if (w1 > w2) {
         w2 = edgeDst[++v_ptr];
       } else {
+        atomicAdd(triangleCount+idx, 1);
+        atomicAdd(triangleCount+u_ptr, 1);
+        atomicAdd(triangleCount+v_ptr, 1);
         w1 = edgeDst[++u_ptr];
         w2 = edgeDst[++v_ptr];
-        triangleCount[idx]++;
-        triangleCount[u_ptr]++;
-        triangleCount[v_ptr]++;
       }
     }
   }
@@ -83,17 +84,17 @@ __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge tr
       } else if (w1 > w2) {
         w2 = edgeDst[++v_ptr];
       } else {
-        w1 = edgeDst[++u_ptr];
-        w2 = edgeDst[++v_ptr];
         int32_t local_offset=atomicAdd(triangleOffCounts+i,1);
         triangleBuffers1[local_offset]=u_ptr;
         triangleBuffers2[local_offset]=v_ptr;
-        int32_t u_offset=atomicAdd(triangleOffCounts+u,1);
+        int32_t u_offset=atomicAdd(triangleOffCounts+u_ptr,1);
         triangleBuffers1[u_offset]=v_ptr;
         triangleBuffers2[u_offset]=i;
-        int32_t v_offset=atomicAdd(triangleOffCounts+v,1);
+        int32_t v_offset=atomicAdd(triangleOffCounts+v_ptr,1);
         triangleBuffers1[v_offset]=u_ptr;
         triangleBuffers2[v_offset]=i;
+        w1 = edgeDst[++u_ptr];
+        w2 = edgeDst[++v_ptr];
       }
     }
   }
@@ -122,7 +123,7 @@ __global__ static void truss_decompose(int32_t* triangleCounts, //!< per-edge tr
         atomicAdd(triangleRemove+triangleBuffers2[iter],1);
       }
     }
-    else if (my_triangle_count>0) {
+    else if (my_triangle_count>(0)) {
       local_edge_exists=1;
     }
   }
@@ -141,25 +142,28 @@ __global__ static void update_triangles(int32_t* triangleCounts, //!< per-edge t
   for (int32_t i = idx; i < numEdges; i += blockDim.x * gridDim.x) {
     if (triangleCounts[i]<=triangleRemove[i]) { //must remove triangles associated with this edge
       for (int32_t iter = triangleOffsets[i];iter!=triangleOffsets[i+1];++iter) {
-        int32_t e1=atomicAdd(&triangleBuffers1[iter],0u);
-        int32_t e2=atomicAdd(&triangleBuffers2[iter],0u);
-        if (e1!=ULLONG_MAX) {
+        //int32_t e1=atomicAdd(&triangleBuffers1[iter],0u);
+        //int32_t e2=atomicAdd(&triangleBuffers2[iter],0u);
+        int32_t e1=atomicExch(&triangleBuffers1[iter],-1);
+        int32_t e2=atomicExch(&triangleBuffers2[iter],-1);
+        //printf("%d %d %d\n",i,e1,e2);
+        if (e1!=-1&&e2!=-1) {
           for (int32_t j=triangleOffsets[e1];j!=triangleOffsets[e1+1];++j) {
             int32_t ea=atomicAdd(&triangleBuffers1[j],0u);
             int32_t eb=atomicAdd(&triangleBuffers2[j],0u);
-            if (ea==i||eb==i) {
-              atomicExch(&triangleBuffers1[j],ULLONG_MAX);
-              atomicExch(&triangleBuffers2[j],ULLONG_MAX);
+            if ((ea==i&&eb==e2)||(ea==e2&&eb==i)) {
+              //printf("%d %d %d\n",e1,ea,eb);
+              atomicExch(&triangleBuffers1[j],-1);
+              atomicExch(&triangleBuffers2[j],-1);
             }
           }
-        }
-        if (e2!=ULLONG_MAX) {
           for (int32_t j=triangleOffsets[e2];j!=triangleOffsets[e2+1];++j) {
             int32_t ea=atomicAdd(&triangleBuffers1[j],0u);
             int32_t eb=atomicAdd(&triangleBuffers2[j],0u);
-            if (ea==i||eb==i) {
-              atomicExch(&triangleBuffers1[j],ULLONG_MAX);
-              atomicExch(&triangleBuffers2[j],ULLONG_MAX);
+            if ((ea==i&&eb==e1)||(ea==e1&&eb==i)) {
+              //printf("%d %d %d\n",e2,ea,eb);
+              atomicExch(&triangleBuffers1[j],-1);
+              atomicExch(&triangleBuffers2[j],-1);
             }
           }
         }
@@ -167,7 +171,7 @@ __global__ static void update_triangles(int32_t* triangleCounts, //!< per-edge t
       triangleCounts[i]=0;
     }
     else {
-      triangleCounts[i]-=triangleRemove[i];
+      //triangleCounts[i]-=triangleRemove[i];
     }
   }
 }
@@ -234,7 +238,13 @@ int main(int argc, char * argv[]) {
 	count_triangle<<<dimBlock, dimGrid>>>(triangleCount, edgeSrc_device, edgeDst_device, rowPtr_device, numEdges);
   cudaDeviceSynchronize();
   
-
+  std::cout << "Triangle Count" << std::endl;
+	int32_t totalCount = 0;
+	for (int32_t i = 0; i < numEdges; ++i) {
+		std::cout << triangleCount[i] << ' ';
+		totalCount += triangleCount[i];
+	}
+  std::cout << "totalCount: " << totalCount << std::endl;
 
   thrust::device_ptr<int32_t> triangleCount_ptr(triangleCount);
   triangleOffsets[0]=0;
@@ -242,15 +252,34 @@ int main(int argc, char * argv[]) {
   thrust::inclusive_scan(triangleCount_ptr,triangleCount_ptr+numEdges,triangleOffsets_ptr+1);
   cudaDeviceSynchronize();
   thrust::device_ptr<int32_t> triangleOffCounts_ptr(triangleOffCounts);
-  thrust::copy(triangleOffsets_ptr,triangleOffCounts_ptr);
+  thrust::copy(triangleOffsets_ptr,triangleOffsets_ptr+numEdges+1,triangleOffCounts_ptr);
+
+  std::cout << "Scan:" << std::endl;
+  for (int32_t i = 0; i < numEdges+1; ++i) {
+  	std::cout << triangleOffsets_ptr[i] << " ";
+  }
+  std::cout << std::endl;
   
   cudaMallocManaged(&triangleBuffers1,triangleOffsets[numEdges]*sizeof(int32_t));
   cudaMallocManaged(&triangleBuffers2,triangleOffsets[numEdges]*sizeof(int32_t));
   write_triangle<<<dimBlock, dimGrid>>>(triangleOffsets, triangleOffCounts, triangleBuffers1, triangleBuffers2, edgeSrc_device, edgeDst_device, rowPtr_device, numEdges);
   cudaDeviceSynchronize();
-  
+
+  // std::cout << "Triangle Write" << std::endl;
+  // for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
+  // 	std::cout << triangleBuffers1[i] << ":" << triangleBuffers2[i] << '\t';
+  // }
+  // std::cout << std::endl;
+  std::cout << "after update_triangles" << std::endl;
+    for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
+      if (!(triangleBuffers1[i]+1==0&&triangleBuffers2[i]+1==0))
+    	std::cout << triangleBuffers1[i]+1 << ":" << triangleBuffers2[i]+1 << '\t';
+    }
+    std::cout << std::endl;
   while (*edge_exists) {
     if (*new_deletes==0) {
+      //
+      std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<std::endl;
       ++k;
     }
     *edge_exists=0;
@@ -260,18 +289,41 @@ int main(int argc, char * argv[]) {
     cudaDeviceSynchronize();
     truss_decompose<<<dimBlock, dimGrid>>>(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, edge_exists, new_deletes, numEdges, k);
     cudaDeviceSynchronize();
+
+    // std::cout << "Triangle buffers" << std::endl;
+    // for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
+    // 	std::cout << triangleBuffers1[i] << ":" << triangleBuffers2[i] << '\t';
+    // }
+    // std::cout << std::endl;
+
     if (*new_deletes==1) {
     update_triangles<<<dimBlock, dimGrid>>>(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, numEdges);
     cudaDeviceSynchronize();
+    
+    std::cout << "after update_triangles" << std::endl;
+      std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<std::endl;
+      for (int32_t i=0; i<numEdges;++i) {
+        std::cout<<(i+1)<<" : ";
+        for (int32_t j=triangleOffsets[i];j!=triangleOffsets[i+1];++j) {
+          if (!(triangleBuffers1[i]+1==0&&triangleBuffers2[i]+1==0))
+          std::cout<<triangleBuffers1[j]+1<<":"<<triangleBuffers2[j]+1<<"\t";
+        }
+        std::cout<<std::endl;
+      }
+      /*for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
+      if (!(triangleBuffers1[i]+1==0&&triangleBuffers2[i]+1==0))
+    	std::cout << triangleBuffers1[i]+1 << ":" << triangleBuffers2[i]+1 << '\t';
+    }*/
+    std::cout << std::endl;
     }
   }
   // std::cout << "Triangle Count" << std::endl;
-	int32_t totalCount = 0;
+	// int32_t totalCount = 0;
 	// for (int32_t i = 0; i < numEdges; ++i) {
 	// 	std::cout << triangleCount[i] << ' ';
 	// 	totalCount += triangleCount[i];
 	// }
-  std::cout << "totalCount: " << totalCount << std::endl;
+  // std::cout << "totalCount: " << totalCount << std::endl;
 
   std::cout << "kmax = " << k << std::endl;
   

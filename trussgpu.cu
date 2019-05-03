@@ -172,85 +172,93 @@ void truss_wrapper(COOView<int> graph) {
 	triangle_count<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d,edgeSrcs_d,num_rows,num_edges,triangles_count);
 	cudaDeviceSynchronize();
 	std::cout << "Triangle Count" << std::endl;
+	int totalCount = 0;
 	for (int i = 0; i < num_edges; ++i) {
-		std::cout << triangles_count[i] << ' ';
+		// std::cout << triangles_count[i] << ' ';
+		totalCount += triangles_count[i];
 	}
-	std::cout << std::endl;
+	std::cout << "totalCount: " << totalCount << std::endl;
 	//allocate necessary memory
-	int* triangles_buffer=nullptr;
-	int* triangles_offsets=nullptr;
-	cudaMallocManaged(&triangles_offsets,(num_edges+1)*sizeof(int));
-	triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
+	// int* triangles_buffer=nullptr;
+	// int* triangles_offsets=nullptr;
+	// cudaMallocManaged(&triangles_offsets,(num_edges+1)*sizeof(int));
+	// triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
 	/*int start=0;
 	for (int i=0;i!=num_edges;++i) {
 		triangles_offsets[i]=start;
 		start+=2*triangles_count[i];
 	}
 	triangles_offsets[num_edges]=start;*/
-	cudaMallocManaged(&triangles_buffer,(triangles_offsets[num_edges])*sizeof(int));
+	// cudaMallocManaged(&triangles_buffer,(triangles_offsets[num_edges])*sizeof(int));
 	//call triangle_write
-	triangle_write<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_buffer, triangles_offsets);
-	cudaDeviceSynchronize();
+	// triangle_write<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d,rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_buffer, triangles_offsets);
+	// cudaDeviceSynchronize();
 
-	std::cout << "Triangle Write" << std::endl;
-	std::cout << "triangles_buffer" << std::endl;
-	for (int i = 0; i < triangles_offsets[num_edges]; ++i) {
-		std::cout << triangles_buffer[i] << ' ';
-	}
-	std::cout << std::endl;
+	// std::cout << "Triangle Write" << std::endl;
+	// std::cout << "triangles_buffer" << std::endl;
+	// for (int i = 0; i < triangles_offsets[num_edges]; ++i) {
+	// 	std::cout << triangles_buffer[i] << ' ';
+	// }
+	// std::cout << std::endl;
 
-	std::cout << "triangles_offsets" << std::endl;
-	for (int i = 0; i < triangles_offsets[num_edges]; ++i) {
-		std::cout << triangles_offsets[i] << ' ';
-	}
-	std::cout << std::endl;
+	// std::cout << "triangles_offsets" << std::endl;
+	// for (int i = 0; i < triangles_offsets[num_edges]; ++i) {
+	// 	std::cout << triangles_offsets[i] << ' ';
+	// }
+	// std::cout << std::endl;
 
-	int* edge_exists_ptr=nullptr;
-	int* new_deletes_ptr=nullptr;
-	int k=2;
-	cudaMallocManaged(&edge_exists_ptr,sizeof(int));
-	cudaMallocManaged(&new_deletes_ptr,sizeof(int));
-	*edge_exists_ptr=1;
-	*new_deletes_ptr=0;
-	while (*edge_exists_ptr) {
-		if (*new_deletes_ptr==0) {
-			//output current graph as k-truss subgraph
-			//remove edges from graph
-			//adjust num_edges here
-			//perform stream compaction here
-			int old_num_edges=0;
-			thrust::device_vector<int> tricounts(num_edges);
-			thrust::device_ptr<int> triangles_count_d(triangles_count);
-			thrust::device_ptr<int> triangles_offsets_d(triangles_offsets);
-			auto result_end=thrust::copy_if(triangles_count_d,triangles_count_d+old_num_edges,tricounts.begin(),is_positive());
-			thrust::copy(tricounts.begin(),result_end,triangles_count_d);
-			triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
-			cudaDeviceSynchronize();
-			int newtricountsum=thrust::reduce(triangles_count_d,triangles_count_d+num_edges);
-			//
-			thrust::device_vector<int> tribuffer((newtricountsum+1)*2);
-			thrust::device_ptr<int> triangles_buffer_d(triangles_buffer);
-			auto result_bend=thrust::copy_if(triangles_buffer_d,triangles_buffer_d+((old_num_edges+1)*2),tribuffer.begin(),is_not_m1());
-			thrust::copy(tribuffer.begin(),tribuffer.end(),triangles_buffer_d);
-			++k;
-		}
-		*edge_exists_ptr=0;
-		*new_deletes_ptr=0;
-		truss_decomposition<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d, rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_count, triangles_offsets, triangles_buffer, edge_exists_ptr, new_deletes_ptr, k);
-		cudaDeviceSynchronize();
-	}
+	// int* edge_exists_ptr=nullptr;
+	// int* new_deletes_ptr=nullptr;
+	// int k=2;
+	// cudaMallocManaged(&edge_exists_ptr,sizeof(int));
+	// cudaMallocManaged(&new_deletes_ptr,sizeof(int));
+	// *edge_exists_ptr=1;
+	// *new_deletes_ptr=0;
+	// while (*edge_exists_ptr) {
+	// 	if (*new_deletes_ptr==0) {
+	// 		//output current graph as k-truss subgraph
+	// 		//remove edges from graph
+	// 		//adjust num_edges here
+	// 		//perform stream compaction here
+	// 		int old_num_edges=0;
+	// 		thrust::device_vector<int> tricounts(num_edges);
+	// 		thrust::device_ptr<int> triangles_count_d(triangles_count);
+	// 		thrust::device_ptr<int> triangles_offsets_d(triangles_offsets);
+	// 		auto result_end=thrust::copy_if(triangles_count_d,triangles_count_d+old_num_edges,tricounts.begin(),is_positive());
+	// 		thrust::copy(tricounts.begin(),result_end,triangles_count_d);
+	// 		triangle_scan<<<1, numThreadsPerBlock>>>(num_edges,triangles_count,triangles_offsets);
+	// 		cudaDeviceSynchronize();
+	// 		int newtricountsum=thrust::reduce(triangles_count_d,triangles_count_d+num_edges);
+	// 		//
+	// 		thrust::device_vector<int> tribuffer((newtricountsum+1)*2);
+	// 		thrust::device_ptr<int> triangles_buffer_d(triangles_buffer);
+	// 		auto result_bend=thrust::copy_if(triangles_buffer_d,triangles_buffer_d+((old_num_edges+1)*2),tribuffer.begin(),is_not_m1());
+	// 		thrust::copy(tribuffer.begin(),tribuffer.end(),triangles_buffer_d);
+	// 		++k;
+	// 	}
+	// 	*edge_exists_ptr=0;
+	// 	*new_deletes_ptr=0;
+	// 	truss_decomposition<<<NUM_BLOCKS, numThreadsPerBlock>>>(edgeDsts_d, rowPtrs_d, edgeSrcs_d, num_rows, num_edges, triangles_count, triangles_offsets, triangles_buffer, edge_exists_ptr, new_deletes_ptr, k);
+	// 	cudaDeviceSynchronize();
+	// }
 	cudaFree(edgeDsts_d);
 	cudaFree(rowPtrs_d);
 	cudaFree(edgeSrcs_d);
 	cudaFree(triangles_count);
-	cudaFree(triangles_offsets);
-	cudaFree(triangles_buffer);
-	cudaFree(edge_exists_ptr);
-	cudaFree(new_deletes_ptr);
+	// cudaFree(triangles_offsets);
+	// cudaFree(triangles_buffer);
+	// cudaFree(edge_exists_ptr);
+	// cudaFree(new_deletes_ptr);
 }
-int main() {
+int main(int argc, char * argv[]) {
 	std::vector<std::pair<int,int>> edgetemp;
-	EdgeListFile elf("./data/test2.bel");
+	std::string test_filename;	
+	if (argv[1] == NULL) {
+    	test_filename = "./data/test3.bel";
+	} else {
+		test_filename = argv[1];
+	}
+	EdgeListFile elf(test_filename);
 	elf.get_edges(edgetemp,8);
 	COO<int> graph=COO<int>::from_edges(edgetemp.begin(),edgetemp.end());
 	truss_wrapper(graph.view());

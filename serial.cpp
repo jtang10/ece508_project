@@ -7,8 +7,9 @@
 #include "edge_list_file.hpp"
 #include "coo-impl.hpp"
 #include <chrono>
+#include <numeric>
 
-#define  DEBUG false
+#define  DEBUG true
 
 using namespace std;
 
@@ -18,11 +19,11 @@ inline pair<uint64_t, uint64_t> set_edge_pair(uint64_t u, uint64_t v) {
 
 // when originEdge is removed, iterate through every triangle it involves, delete that triangle record in the other 
 // two edges and decrement the triangleCount.
-void update_triangle(vector<uint64_t> &triangleCount, 
+uint64_t update_triangle(vector<uint64_t> &triangleCount, 
                     vector<vector<pair<uint64_t, uint64_t>>> &triangleList,
                     uint64_t originEdge
 ) { 
-    // uint64_t numRemoved = 0;
+    uint64_t numRemoved = 0;
     for (auto it = triangleList[originEdge].begin(); it != triangleList[originEdge].end(); it++) {
         uint64_t edge1 = it->first;
         uint64_t edge2 = it->second;
@@ -43,8 +44,10 @@ void update_triangle(vector<uint64_t> &triangleCount,
 
     // clear its own triangles at the last.
     triangleList[originEdge].clear();
-    // numRemoved += triangleCount[originEdge];
+    numRemoved += triangleCount[originEdge]*3;
     triangleCount[originEdge] = 0;
+
+    return numRemoved;
 }
 
 /* Given the COO format of a graph, return the number of triangles and
@@ -56,8 +59,7 @@ void triangle_count(vector<uint64_t> &triangleCount,
                     const uint64_t* edgeSrc, 
                     const uint64_t* edgeDst,
                     const uint64_t* rowPtr,
-                    uint64_t numEdges,
-                    uint64_t rowPtr_len
+                    uint64_t numEdges
 ) {
     uint64_t u, v, u_ptr, v_ptr, u_end, v_end, w1, w2;
 
@@ -101,12 +103,14 @@ uint64_t truss_decomposition2(vector<uint64_t> triangleCount,
 							  const uint64_t* rowPtr,
 							  uint64_t numEdges
 ) {
+    uint64_t numtri=std::accumulate(triangleCount.begin(),triangleCount.end(),0);
 	bool edgeExists = true;
 	bool newDeletes = false;		
 	uint64_t k = 2;
 	uint64_t roundRemove = 0;	
 	uint64_t edgeRemoved = 0;
     int removeFlag[numEdges] = {0};
+    uint64_t triangleRemoved = 0;
 
 	while (edgeExists) {
         if (DEBUG) {
@@ -122,7 +126,7 @@ uint64_t truss_decomposition2(vector<uint64_t> triangleCount,
         }
 
 		if (!newDeletes) {
-            cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges-edgeRemoved << endl;
+            cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges-edgeRemoved << ' ' << "TrianglesLeft: " << numtri-triangleRemoved << endl;
 			k++;
 			roundRemove = 0;
 		}
@@ -135,11 +139,11 @@ uint64_t truss_decomposition2(vector<uint64_t> triangleCount,
                 edgeRemoved++;
                 removeFlag[i] = 1;
 			} else if (triangleCount[i]>0 && triangleCount[i]<(k-2)*3) {
-                update_triangle(triangleCount, triangleList, i);
+                triangleRemoved += update_triangle(triangleCount, triangleList, i);
 				newDeletes = true;
 				edgeRemoved++;
                 removeFlag[i] = 1;
-			} else if (triangleCount[i] > (k-2)*3) {
+			} else if (triangleCount[i] >= (k-2)*3) {
 				edgeExists = true;
 			}
 		}
@@ -157,12 +161,14 @@ uint64_t truss_decomposition(vector<uint64_t> triangleCount,
                         const uint64_t* rowPtr,
                         uint64_t numEdges
 ) { 
+    uint64_t numtri=std::accumulate(triangleCount.begin(),triangleCount.end(),0);
     uint64_t k = 3;
     uint64_t edgeRemoved = 0;
     uint64_t roundRemove;
     uint64_t removeFlag [numEdges] = {0};  // 0 means present; 1 means will be removed; 2 means already removed
     bool flag = true;
     uint64_t totalCount = 0;
+    uint64_t triangleRemoved = 0;
 
     while (edgeRemoved < numEdges) {
         roundRemove = 0;
@@ -193,7 +199,7 @@ uint64_t truss_decomposition(vector<uint64_t> triangleCount,
                 if (removeFlag[i]==0 && triangleCount[i]<(k-2)*3) {
                     // if the edge has no triangle, just flag it as already removed.
                     if (triangleCount[i]) {
-                        update_triangle(triangleCount, triangleList, i);
+                        triangleRemoved += update_triangle(triangleCount, triangleList, i);
                         flag = true;
                     } 
                     removeFlag[i] = 1;
@@ -218,7 +224,7 @@ uint64_t truss_decomposition(vector<uint64_t> triangleCount,
             }
         }
 
-        cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges - edgeRemoved << endl;
+        cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges - edgeRemoved << " " << "TrianglesLeft: " << numtri-triangleRemoved << endl;
         if (edgeRemoved < numEdges) {
             k++;
             flag = true;
@@ -261,60 +267,51 @@ int main(int argc, char * argv[]) {
 	uint64_t totalCount = 0;
     cout << "numEdges from nnz: " << numEdges << endl;
 
-    uint64_t print_edges = numEdges < 20 ? numEdges : 20;
-    cout << "Row Indices" << endl;
-    for (uint64_t i = 0; i < print_edges; i++) {
-        cout << test_view.row_ind()[i] << ' ';
-    }
-    cout << endl;
+    // uint64_t print_edges = numEdges < 20 ? numEdges : 20;
+    // cout << "Row Indices" << endl;
+    // for (uint64_t i = 0; i < print_edges; i++) {
+    //     cout << test_view.row_ind()[i] << ' ';
+    // }
+    // cout << endl;
 
-    cout << "Col Indices" << endl;
-    for (uint64_t i = 0; i < print_edges; i++) {
-        cout << test_view.col_ind()[i] << ' ';
-    }
-    cout << endl;
+    // cout << "Col Indices" << endl;
+    // for (uint64_t i = 0; i < print_edges; i++) {
+    //     cout << test_view.col_ind()[i] << ' ';
+    // }
+    // cout << endl;
 
-    uint64_t print_row = (test_view.num_rows()+1) < 20 ? test_view.num_rows()+1 : 20;
-    cout << "numRows: " << test_view.num_rows() << endl;
-    cout << "Row Pointer" << endl;
-    for (uint64_t i = 0; i < print_row; i++) {
-        cout << test_view.row_ptr()[i] << ' ';
-    }
-    cout << endl;
+    // uint64_t print_row = (test_view.num_rows()+1) < 20 ? test_view.num_rows()+1 : 20;
+    // cout << "numRows: " << test_view.num_rows() << endl;
+    // cout << "Row Pointer" << endl;
+    // for (uint64_t i = 0; i < print_row; i++) {
+    //     cout << test_view.row_ptr()[i] << ' ';
+    // }
+    // cout << endl;
 
     chrono::steady_clock::time_point begin = chrono::steady_clock::now();
-    uint64_t test_rowptr[10] = {0,3,5,8,10,12,13,15,18,18};
-    triangle_count(triangleCount,
-                   triangleList,
-				   totalCount,
-                   test_view.row_ind(),
-                   test_view.col_ind(),
-                   test_view.row_ptr(),
-                //    test_rowptr,
-                   numEdges,
-                   test_view.num_rows()+1);
+    triangle_count(triangleCount, triangleList, totalCount, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
     chrono::steady_clock::time_point end= chrono::steady_clock::now();
     cout << "Triangle count time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
 	cout << "Total number of triangles: " << totalCount << endl;
 
-    // cout << "Triangle Count" << endl;
-    // for (uint64_t i = 0; i < numEdges; i++) {
-    //     cout << i+1 << ": " << triangleCount[i] << '\t'; 
-    //     for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
-    //         cout << it->first+1 << ':' << it->second+1 << '\t';
-    //     }
-    //     cout << endl;
-    // }
-    // cout << endl;
+    cout << "Triangle Count" << endl;
+    for (uint64_t i = 0; i < numEdges; i++) {
+        cout << i+1 << ": " << triangleCount[i] << '\t'; 
+        for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
+            cout << it->first+1 << ':' << it->second+1 << '\t';
+        }
+        cout << endl;
+    }
+    cout << endl;
+
+    // begin = chrono::steady_clock::now();
+    // uint64_t k = truss_decomposition(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
+    // end= chrono::steady_clock::now();                    
+    // cout << "Truss decomposition time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
+    //cout << "max k = " << k << endl;
 
     begin = chrono::steady_clock::now();
-    uint64_t k = truss_decomposition(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
-    end= chrono::steady_clock::now();                    
-    cout << "Truss decomposition time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
-    cout << "max k = " << k << endl;
-
-    begin = chrono::steady_clock::now();
-    k = truss_decomposition2(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
+    uint64_t k = truss_decomposition2(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
     end= chrono::steady_clock::now();                    
     cout << "Truss decomposition2 time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
     cout << "max k = " << k << endl;
