@@ -61,9 +61,6 @@ COO<Index> COO<Index>::from_edges(EdgeIter begin, EdgeIter end, std::function<bo
       // as big as the current largest row we have recored
       assert(src >= coo.rowPtr_.size() && "are edges not ordered by source?");
       coo.rowPtr_.push_back(coo.colInd_.size());
-      while(coo.rowPtr_.size()<maxseen+2) {
-        coo.rowPtr_.push_back(coo.colInd_.size());
-      }
     }
 
     if (f(edge)) {
