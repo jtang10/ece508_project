@@ -44,12 +44,15 @@ __global__ static void count_triangle(int32_t *triangleCount, //!< per-edge tria
         w1 = edgeDst[++u_ptr];
         w2 = edgeDst[++v_ptr];
         triangleCount[idx]++;
+        triangleCount[u_ptr]++;
+        triangleCount[v_ptr]++;
       }
     }
   }
 }
 
 __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge triangle offsets
+                                      int32_t *triangleOffCounts,
                                       int32_t *triangleBuffers1, //!< per-edge triangle buffers
                                       int32_t *triangleBuffers2, 
                                       const int32_t *const edgeSrc,         //!< node ids for edge srcs
@@ -59,7 +62,6 @@ __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge tr
 ) {
   int32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   for(int32_t i = idx; i < numEdges; i += blockDim.x * gridDim.x) {
-    int32_t local_offset = triangleOffsets[i];
     // Determine the source and destination node for the edge
     int32_t u = edgeSrc[idx];
     int32_t v = edgeDst[idx];
@@ -83,8 +85,15 @@ __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge tr
       } else {
         w1 = edgeDst[++u_ptr];
         w2 = edgeDst[++v_ptr];
+        int32_t local_offset=atomicAdd(triangleOffCounts+i,1);
         triangleBuffers1[local_offset]=u_ptr;
-        triangleBuffers2[local_offset++]=v_ptr;
+        triangleBuffers2[local_offset]=v_ptr;
+        int32_t u_offset=atomicAdd(triangleOffCounts+u,1);
+        triangleBuffers1[u_offset]=v_ptr;
+        triangleBuffers2[u_offset]=i;
+        int32_t v_offset=atomicAdd(triangleOffCounts+v,1);
+        triangleBuffers1[v_offset]=u_ptr;
+        triangleBuffers2[v_offset]=i;
       }
     }
   }
@@ -195,6 +204,7 @@ int main(int argc, char * argv[]) {
 	int32_t* rowPtr_device = nullptr;
 	int32_t* triangleCount = nullptr;
   int32_t* triangleOffsets = nullptr;
+  int32_t* triangleOffCounts = nullptr;
   int32_t* triangleBuffers1 = nullptr;
   int32_t* triangleBuffers2 = nullptr;
   int32_t* triangleRemove = nullptr;
@@ -208,6 +218,7 @@ int main(int argc, char * argv[]) {
 	cudaMalloc(&rowPtr_device, (numRows+1)*sizeof(int32_t));
 	cudaMallocManaged(&triangleCount, numEdges*sizeof(int32_t));
   cudaMallocManaged(&triangleOffsets, (numEdges+1)*sizeof(int32_t));
+  cudaMallocManaged(&triangleOffCounts, (numEdges+1)*sizeof(int32_t));
   cudaMallocManaged(&triangleRemove, numEdges*sizeof(int32_t));
   cudaMallocManaged(&edge_exists, sizeof(int));
   cudaMallocManaged(&new_deletes, sizeof(int));
@@ -230,10 +241,12 @@ int main(int argc, char * argv[]) {
   thrust::device_ptr<int32_t> triangleOffsets_ptr(triangleOffsets);
   thrust::inclusive_scan(triangleCount_ptr,triangleCount_ptr+numEdges,triangleOffsets_ptr+1);
   cudaDeviceSynchronize();
+  thrust::device_ptr<int32_t> triangleOffCounts_ptr(triangleOffCounts);
+  thrust::copy(triangleOffsets_ptr,triangleOffCounts_ptr);
   
   cudaMallocManaged(&triangleBuffers1,triangleOffsets[numEdges]*sizeof(int32_t));
   cudaMallocManaged(&triangleBuffers2,triangleOffsets[numEdges]*sizeof(int32_t));
-  write_triangle<<<dimBlock, dimGrid>>>(triangleOffsets, triangleBuffers1, triangleBuffers2, edgeSrc_device, edgeDst_device, rowPtr_device, numEdges);
+  write_triangle<<<dimBlock, dimGrid>>>(triangleOffsets, triangleOffCounts, triangleBuffers1, triangleBuffers2, edgeSrc_device, edgeDst_device, rowPtr_device, numEdges);
   cudaDeviceSynchronize();
   
   while (*edge_exists) {
