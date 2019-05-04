@@ -7,6 +7,7 @@
 #include "edge_list_file.hpp"
 #include "coo-impl.hpp"
 #include <chrono>
+#include <numeric>
 
 #define  DEBUG false
 
@@ -122,7 +123,7 @@ uint64_t truss_decomposition2(vector<uint64_t> triangleCount,
         }
 
 		if (!newDeletes) {
-            cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges-edgeRemoved << endl;
+            cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges-edgeRemoved << accumulate(triangleCount.begin(),triangleCount.end(),0)<<endl;
 			k++;
 			roundRemove = 0;
 		}
@@ -307,14 +308,14 @@ int main(int argc, char * argv[]) {
     // }
     // cout << endl;
 
-    begin = chrono::steady_clock::now();
-    uint64_t k = truss_decomposition(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
-    end= chrono::steady_clock::now();                    
-    cout << "Truss decomposition time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
-    cout << "max k = " << k << endl;
+    // begin = chrono::steady_clock::now();
+    // uint64_t k = truss_decomposition(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
+    // end= chrono::steady_clock::now();                    
+    // cout << "Truss decomposition time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
+    // cout << "max k = " << k << endl;
 
     begin = chrono::steady_clock::now();
-    k = truss_decomposition2(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
+    uint64_t k = truss_decomposition2(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
     end= chrono::steady_clock::now();                    
     cout << "Truss decomposition2 time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
     cout << "max k = " << k << endl;
