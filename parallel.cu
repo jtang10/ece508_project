@@ -240,6 +240,8 @@ int main(int argc, char * argv[]) {
   int* edge_exists = nullptr;
   int* new_deletes = nullptr;
   int k=2;
+  float milliseconds = 0;
+
 
 	//allocate necessary memory
 	cudaMalloc(&edgeSrc_device, numEdges*sizeof(int32_t));
@@ -261,16 +263,25 @@ int main(int argc, char * argv[]) {
   //call triangle_count
   dim3 dimBlock(512);
   dim3 dimGrid (ceil(numEdges * 1.0 / dimBlock.x));
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start);
+
 	count_triangle<<<dimBlock, dimGrid>>>(triangleCount, edgeSrc_device, edgeDst_device, rowPtr_device, numEdges);
   cudaDeviceSynchronize();
-  
-  std::cout << "Triangle Count" << std::endl;
+  cudaEventRecord(stop);
+  cudaEventSynchronize(stop);
+  milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  std::cout << "TC time: " << milliseconds << " ms" << std::endl;
+  /*std::cout << "Triangle Count" << std::endl;
 	int32_t totalCount = 0;
 	for (int32_t i = 0; i < numEdges; ++i) {
 		std::cout << triangleCount[i] << ' ';
 		totalCount += triangleCount[i];
-	}
-  std::cout << "totalCount: " << totalCount << std::endl;
+	}*/
+  //std::cout << "totalCount: " << totalCount << std::endl;
 
   thrust::device_ptr<int32_t> triangleCount_ptr(triangleCount);
   triangleOffsets[0]=0;
@@ -280,11 +291,11 @@ int main(int argc, char * argv[]) {
   thrust::device_ptr<int32_t> triangleOffCounts_ptr(triangleOffCounts);
   thrust::copy(triangleOffsets_ptr,triangleOffsets_ptr+numEdges+1,triangleOffCounts_ptr);
 
-  std::cout << "Scan:" << std::endl;
+  /*std::cout << "Scan:" << std::endl;
   for (int32_t i = 0; i < numEdges+1; ++i) {
   	std::cout << triangleOffsets_ptr[i] << " ";
   }
-  std::cout << std::endl;
+  std::cout << std::endl;*/
   
   cudaMallocManaged(&triangleBuffers1,triangleOffsets[numEdges]*sizeof(int32_t));
   cudaMallocManaged(&triangleBuffers2,triangleOffsets[numEdges]*sizeof(int32_t));
@@ -296,16 +307,18 @@ int main(int argc, char * argv[]) {
   // 	std::cout << triangleBuffers1[i] << ":" << triangleBuffers2[i] << '\t';
   // }
   // std::cout << std::endl;
-  std::cout << "after update_triangles" << std::endl;
+  /*std::cout << "after update_triangles" << std::endl;
     for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
       if (!(triangleBuffers1[i]+1==0&&triangleBuffers2[i]+1==0))
     	std::cout << triangleBuffers1[i]+1 << ":" << triangleBuffers2[i]+1 << '\t';
     }
-    std::cout << std::endl;
+    std::cout << std::endl;*/
+    cudaEventRecord(start);
+
   while (*edge_exists) {
     if (*new_deletes==0) {
       //
-      std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<std::endl;
+      //std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<std::endl;
       ++k;
     }
     *edge_exists=0;
@@ -344,9 +357,14 @@ int main(int argc, char * argv[]) {
       if (!(triangleBuffers1[i]+1==0&&triangleBuffers2[i]+1==0))
     	std::cout << triangleBuffers1[i]+1 << ":" << triangleBuffers2[i]+1 << '\t';
     }*/
-    std::cout << std::endl;
+    //std::cout << std::endl;
     }
   }
+  cudaEventRecord(stop);
+  cudaEventSynchronize(stop);
+  milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  std::cout << "k truss time: " << milliseconds << " ms" << std::endl;
   // std::cout << "Triangle Count" << std::endl;
 	// int32_t totalCount = 0;
 	// for (int32_t i = 0; i < numEdges; ++i) {
@@ -355,7 +373,7 @@ int main(int argc, char * argv[]) {
 	// }
   // std::cout << "totalCount: " << totalCount << std::endl;
 
-  std::cout << "kmax = " << k << std::endl;
+  std::cout << "kmax = " << (k-1) << std::endl;
   
   cudaFree(edgeSrc_device);
   cudaFree(edgeDst_device);
