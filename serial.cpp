@@ -9,7 +9,7 @@
 #include <chrono>
 #include <numeric>
 
-#define  DEBUG true
+#define  DEBUG false
 
 using namespace std;
 
@@ -224,8 +224,8 @@ uint64_t truss_decomposition(vector<uint64_t> triangleCount,
             }
         }
 
-        cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges - edgeRemoved << " " << "TrianglesLeft: " << numtri-triangleRemoved << endl;
         if (edgeRemoved < numEdges) {
+            cout << "k=" << k << ' ' << "iter=" << roundRemove << ' ' << "Edgesleft: " << numEdges - edgeRemoved << " " << "TrianglesLeft: " << numtri-triangleRemoved << endl;
             k++;
             flag = true;
         } else {
@@ -240,7 +240,7 @@ uint64_t truss_decomposition(vector<uint64_t> triangleCount,
 int main(int argc, char * argv[]) {
  	string test_filename;	
 	if (argv[1] == NULL) {
-    	test_filename = "./data/test3.bel";
+    	test_filename = "./data/test2.bel";
 	} else {
 		test_filename = argv[1];
 	}
@@ -291,18 +291,18 @@ int main(int argc, char * argv[]) {
     chrono::steady_clock::time_point begin = chrono::steady_clock::now();
     triangle_count(triangleCount, triangleList, totalCount, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
     chrono::steady_clock::time_point end= chrono::steady_clock::now();
-    cout << "Triangle count time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
+    cout << "Triangle count time = " << chrono::duration_cast<chrono::milliseconds> (end - begin).count() << " ms" << std::endl;
 	cout << "Total number of triangles: " << totalCount << endl;
 
-    cout << "Triangle Count" << endl;
-    for (uint64_t i = 0; i < numEdges; i++) {
-        cout << i+1 << ": " << triangleCount[i] << '\t'; 
-        for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
-            cout << it->first+1 << ':' << it->second+1 << '\t';
-        }
-        cout << endl;
-    }
-    cout << endl;
+    // cout << "Triangle Count" << endl;
+    // for (uint64_t i = 0; i < numEdges; i++) {
+    //     cout << i+1 << ": " << triangleCount[i] << '\t'; 
+    //     for (auto it = triangleList[i].begin(); it != triangleList[i].end(); ++it) {
+    //         cout << it->first+1 << ':' << it->second+1 << '\t';
+    //     }
+    //     cout << endl;
+    // }
+    // cout << endl;
 
     // begin = chrono::steady_clock::now();
     // uint64_t k = truss_decomposition(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
@@ -313,7 +313,7 @@ int main(int argc, char * argv[]) {
     begin = chrono::steady_clock::now();
     uint64_t k = truss_decomposition2(triangleCount, triangleList, test_view.row_ind(), test_view.col_ind(), test_view.row_ptr(), numEdges);
     end= chrono::steady_clock::now();                    
-    cout << "Truss decomposition2 time = " << chrono::duration_cast<chrono::microseconds> (end - begin).count() << " us" << std::endl;
+    cout << "Truss decomposition2 time = " << chrono::duration_cast<chrono::milliseconds> (end - begin).count() << " ms" << std::endl;
     cout << "max k = " << k << endl;
 
     // cout << "Triangle Count" << endl;
