@@ -227,6 +227,11 @@ int main(int argc, char * argv[]) {
   // vector<vector<pair<int32_t, int32_t>>> triangleList(numEdges); // keep track of the triangle edges for each edge
   std::cout << "numEdges from nnz: " << numEdges << std::endl;
 
+  cudaEvent_t start_total, stop_total;
+  cudaEventCreate(&start_total);
+  cudaEventCreate(&stop_total);
+  cudaEventRecord(start_total);
+
 	int32_t* edgeSrc_device = nullptr;
   int32_t* edgeDst_device = nullptr;
 	int32_t* rowPtr_device = nullptr;
@@ -263,6 +268,7 @@ int main(int argc, char * argv[]) {
   //call triangle_count
   dim3 dimBlock(512);
   dim3 dimGrid (ceil(numEdges * 1.0 / dimBlock.x));
+
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
@@ -380,5 +386,12 @@ int main(int argc, char * argv[]) {
   cudaFree(rowPtr_device);
   cudaFree(triangleCount);
   cudaFree(triangleOffsets);
+
+  cudaEventRecord(stop_total);
+  cudaEventSynchronize(stop_total);
+  milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start_total, stop_total);
+  std::cout << "total time: " << milliseconds << " ms" << std::endl;
+  
   return 0;
 }
