@@ -100,7 +100,8 @@ __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge tr
   }
 }
 
-__global__ static void truss_decompose(int32_t* triangleCounts, //!< per-edge triangle counts
+__global__ static void truss_decompose(int32_t* edgeRemove,
+                                       int32_t* triangleCounts, //!< per-edge triangle counts
                                        int32_t* triangleOffsets, //!< per-edge triangle offsets
                                        int32_t* triangleRemove, //!< per-edge triangle removes
                                        int32_t* triangleBuffers1, //!< per-edge triangle buffer
@@ -117,6 +118,7 @@ __global__ static void truss_decompose(int32_t* triangleCounts, //!< per-edge tr
     int32_t my_triangle_count=triangleCounts[i];
     if (my_triangle_count<(k-2)*3&&my_triangle_count>0) { //remove edge
       local_new_deletes=1;
+      edgeRemove[i]=1;
       atomicAdd(triangleRemove+i,my_triangle_count);
       for (int32_t iter = triangleOffsets[i];iter!=triangleOffsets[i+1];++iter) {
         atomicAdd(triangleRemove+triangleBuffers1[iter],1);
@@ -125,10 +127,32 @@ __global__ static void truss_decompose(int32_t* triangleCounts, //!< per-edge tr
     }
     else if (my_triangle_count>(0)) {
       local_edge_exists=1;
+      edgeRemove[i]=0;
     }
   }
   atomicCAS(edge_exists,0,local_edge_exists);
   atomicCAS(new_deletes,0,local_new_deletes);
+}
+
+__global__ static void adjust_remove(int32_t* edgeRemove, 
+  int32_t* triangleOffsets, 
+  int32_t* triangleBuffers1, 
+  int32_t* triangleBuffers2, 
+  int32_t* triangleRemove,
+  int32_t numEdges) {
+  int32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  for (int32_t i = idx; i<numEdges; i+=blockDim.x*gridDim.x) {
+    if (!edgeRemove[i]) {
+      for (int j=triangleOffsets[i];j!=triangleOffsets[i+1];++j) {
+        int32_t e1=triangleBuffers1[j];
+        int32_t e2=triangleBuffers2[j];
+        if (edgeRemove[e1]&&edgeRemove[e2]) {
+          --triangleRemove[i];
+        }
+      }
+    }
+  }
+
 }
 
 __global__ static void update_triangles(int32_t* triangleCounts, //!< per-edge triangle counts
@@ -171,7 +195,7 @@ __global__ static void update_triangles(int32_t* triangleCounts, //!< per-edge t
       triangleCounts[i]=0;
     }
     else {
-      //triangleCounts[i]-=triangleRemove[i];
+      triangleCounts[i]-=triangleRemove[i];
     }
   }
 }
@@ -212,6 +236,7 @@ int main(int argc, char * argv[]) {
   int32_t* triangleBuffers1 = nullptr;
   int32_t* triangleBuffers2 = nullptr;
   int32_t* triangleRemove = nullptr;
+  int32_t* edgeRemove = nullptr;
   int* edge_exists = nullptr;
   int* new_deletes = nullptr;
   int k=2;
@@ -226,6 +251,7 @@ int main(int argc, char * argv[]) {
   cudaMallocManaged(&triangleRemove, numEdges*sizeof(int32_t));
   cudaMallocManaged(&edge_exists, sizeof(int));
   cudaMallocManaged(&new_deletes, sizeof(int));
+  cudaMallocManaged(&edgeRemove,numEdge*sizeof(int32_t));
   *edge_exists=1;
   *new_deletes=0;
 	//copy over data
@@ -287,7 +313,10 @@ int main(int argc, char * argv[]) {
     thrust::device_ptr<int32_t> triangleRemove_ptr(triangleRemove);
     thrust::fill(triangleRemove_ptr,triangleRemove_ptr+numEdges,0);
     cudaDeviceSynchronize();
-    truss_decompose<<<dimBlock, dimGrid>>>(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, edge_exists, new_deletes, numEdges, k);
+    truss_decompose<<<dimBlock, dimGrid>>>(edgeRemove, triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, edge_exists, new_deletes, numEdges, k);
+    //truss_decompose_cpu(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, edge_exists, new_deletes, numEdges, k);
+    cudaDeviceSynchronize();
+    adjust_remove<<<dimBlock, dimGrid>>>(edgeRemove, triangleOffsets, triangleBuffers1, triangleBuffers2, triangleRemove,numEdges);
     cudaDeviceSynchronize();
 
     // std::cout << "Triangle buffers" << std::endl;
@@ -297,10 +326,11 @@ int main(int argc, char * argv[]) {
     // std::cout << std::endl;
 
     if (*new_deletes==1) {
-    update_triangles<<<dimBlock, dimGrid>>>(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, numEdges);
+      update_triangles<<<dimBlock, dimGrid>>>(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, numEdges);
+      //update_triangles_cpu(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, numEdges);
     cudaDeviceSynchronize();
     
-    std::cout << "after update_triangles" << std::endl;
+    /*std::cout << "after update_triangles" << std::endl;
       std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<std::endl;
       for (int32_t i=0; i<numEdges;++i) {
         std::cout<<(i+1)<<" : ";
@@ -309,7 +339,7 @@ int main(int argc, char * argv[]) {
           std::cout<<triangleBuffers1[j]+1<<":"<<triangleBuffers2[j]+1<<"\t";
         }
         std::cout<<std::endl;
-      }
+      }*/
       /*for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
       if (!(triangleBuffers1[i]+1==0&&triangleBuffers2[i]+1==0))
     	std::cout << triangleBuffers1[i]+1 << ":" << triangleBuffers2[i]+1 << '\t';
