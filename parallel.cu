@@ -160,19 +160,23 @@ __global__ static void truss_decompose(int32_t* edgeRemove,
 }
 
 __global__ static void adjust_remove(int32_t* edgeRemove, 
-  int32_t* triangleOffsets, 
-  int32_t* triangleBuffers1, 
-  int32_t* triangleBuffers2, 
-  int32_t* triangleRemove,
-  int32_t numEdges) {
+                                     int32_t* triangleOffsets, 
+                                     int32_t* triangleBuffers1, 
+                                     int32_t* triangleBuffers2, 
+                                     int32_t* triangleRemove,
+                                     int32_t numEdges
+) {
   int32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   for (int32_t i = idx; i<numEdges; i+=blockDim.x*gridDim.x) {
     if (!edgeRemove[i]) {
-      for (int j=triangleOffsets[i];j!=triangleOffsets[i+1];++j) {
+      for (int32_t j=triangleOffsets[i];j!=triangleOffsets[i+1];++j) {
         int32_t e1=triangleBuffers1[j];
         int32_t e2=triangleBuffers2[j];
-        if (edgeRemove[e1]&&edgeRemove[e2]) {
-          --triangleRemove[i];
+        // printf("Thread %d, e1: %d, e2: %d\n", i, e1, e2);
+        if (e1 != -1 && e2 != -1) {
+          if (edgeRemove[e1]&&edgeRemove[e2]) {
+            --triangleRemove[i];
+          }
         }
       }
     }
@@ -298,7 +302,7 @@ int main(int argc, char * argv[]) {
   cudaMallocManaged(&triangleRemove, numEdges*sizeof(int32_t));
   cudaMallocManaged(&edge_exists, sizeof(int));
   cudaMallocManaged(&new_deletes, sizeof(int));
-  cudaMallocManaged(&edgeRemove,numEdge*sizeof(int32_t));
+  cudaMallocManaged(&edgeRemove,numEdges*sizeof(int32_t));
   *edge_exists=1;
   *new_deletes=0;
 	//copy over data
@@ -365,7 +369,7 @@ int main(int argc, char * argv[]) {
   while (*edge_exists) {
     if (*new_deletes==0) {
       //
-      //std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<std::endl;
+      std::cout<<"k="<<k<<" "<<"Triangles Left: "<<thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0)<<" Edges Left: "<<numEdges-thrust::reduce(edgeRemove, edgeRemove+numEdges, 0)<<std::endl;
       ++k;
     }
     *edge_exists=0;
