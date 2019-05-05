@@ -1,0 +1,131 @@
+Numbers of edges in the file : 16
+Confirmed read edges: 16
+numEdges from nnz: 16
+TC time: 2.63555 ms
+Triangle Count
+totalCount: 90
+========= CUDA-MEMCHECK
+========= Invalid __global__ read of size 4
+=========     at 0x00000ba0 in /home/jtang10/programming/ece508_project/parallel.cu:174:adjust_remove(int*, int*, int*, int*, int*, int)
+=========     by thread (0,0,0) in block (7,0,0)
+=========     Address 0x7f219c000bfc is out of bounds
+=========     Device Frame:/home/jtang10/programming/ece508_project/parallel.cu:174:adjust_remove(int*, int*, int*, int*, int*, int) (adjust_remove(int*, int*, int*, int*, int*, int) : 0xba0)
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 (cuLaunchKernel + 0x2c5) [0x26a155]
+=========     Host Frame:./parallel [0x30c82]
+=========     Host Frame:./parallel [0x30e77]
+=========     Host Frame:./parallel [0x65235]
+=========     Host Frame:./parallel [0xb3a9]
+=========     Host Frame:./parallel [0x9f83]
+=========     Host Frame:./parallel [0x9fed]
+=========     Host Frame:./parallel [0x9312]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Invalid __global__ read of size 4
+=========     at 0x00000ba0 in /home/jtang10/programming/ece508_project/parallel.cu:174:adjust_remove(int*, int*, int*, int*, int*, int)
+=========     by thread (0,0,0) in block (3,0,0)
+=========     Address 0x7f219c000bfc is out of bounds
+=========     Device Frame:/home/jtang10/programming/ece508_project/parallel.cu:174:adjust_remove(int*, int*, int*, int*, int*, int) (adjust_remove(int*, int*, int*, int*, int*, int) : 0xba0)
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 (cuLaunchKernel + 0x2c5) [0x26a155]
+=========     Host Frame:./parallel [0x30c82]
+=========     Host Frame:./parallel [0x30e77]
+=========     Host Frame:./parallel [0x65235]
+=========     Host Frame:./parallel [0xb3a9]
+=========     Host Frame:./parallel [0x9f83]
+=========     Host Frame:./parallel [0x9fed]
+=========     Host Frame:./parallel [0x9312]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Program hit cudaErrorLaunchFailure (error 4) due to "unspecified launch failure" on CUDA API call to cudaDeviceSynchronize. 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 [0x377f93]
+=========     Host Frame:./parallel [0x4eb76]
+=========     Host Frame:./parallel [0x9317]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Program hit cudaErrorLaunchFailure (error 4) due to "unspecified launch failure" on CUDA API call to cudaFuncGetAttributes. 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 [0x377f93]
+=========     Host Frame:./parallel [0x5e259]
+=========     Host Frame:./parallel [0xb309]
+=========     Host Frame:./parallel [0xce72]
+=========     Host Frame:./parallel [0x11a53]
+=========     Host Frame:./parallel [0x11360]
+=========     Host Frame:./parallel [0xfb41]
+=========     Host Frame:./parallel [0xf1e6]
+=========     Host Frame:./parallel [0xe76c]
+=========     Host Frame:./parallel [0xd887]
+=========     Host Frame:./parallel [0x9209]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Program hit cudaErrorLaunchFailure (error 4) due to "unspecified launch failure" on CUDA API call to cudaLaunchKernel. 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 [0x377f93]
+=========     Host Frame:./parallel [0x65275]
+=========     Host Frame:./parallel [0xb3a9]
+=========     Host Frame:./parallel [0xac9c]
+=========   terminate called after throwing an instance of 'thrust::system::system_error'
+  what():  parallel_for failed: unspecified launch failure
+  Host Frame:./parallel [0xace6]
+=========     Host Frame:./parallel [0xd997]
+=========     Host Frame:./parallel [0x13bfd]
+=========     Host Frame:./parallel [0x12b0c]
+=========     Host Frame:./parallel [0x11dba]
+=========     Host Frame:./parallel [0x113dd]
+=========     Host Frame:./parallel [0xfb41]
+=========     Host Frame:./parallel [0xf1e6]
+=========     Host Frame:./parallel [0xe76c]
+=========     Host Frame:./parallel [0xd887]
+=========     Host Frame:./parallel [0x9209]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Program hit cudaErrorLaunchFailure (error 4) due to "unspecified launch failure" on CUDA API call to cudaPeekAtLastError. 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 [0x377f93]
+=========     Host Frame:./parallel [0x61da3]
+=========     Host Frame:./parallel [0x13c02]
+=========     Host Frame:./parallel [0x12b0c]
+=========     Host Frame:./parallel [0x11dba]
+=========     Host Frame:./parallel [0x113dd]
+=========     Host Frame:./parallel [0xfb41]
+=========     Host Frame:./parallel [0xf1e6]
+=========     Host Frame:./parallel [0xe76c]
+=========     Host Frame:./parallel [0xd887]
+=========     Host Frame:./parallel [0x9209]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Program hit cudaErrorLaunchFailure (error 4) due to "unspecified launch failure" on CUDA API call to cudaPeekAtLastError. 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 [0x377f93]
+=========     Host Frame:./parallel [0x61da3]
+=========     Host Frame:./parallel [0x113e2]
+=========     Host Frame:./parallel [0xfb41]
+=========     Host Frame:./parallel [0xf1e6]
+=========     Host Frame:./parallel [0xe76c]
+=========     Host Frame:./parallel [0xd887]
+=========     Host Frame:./parallel [0x9209]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Program hit cudaErrorLaunchFailure (error 4) due to "unspecified launch failure" on CUDA API call to cudaPeekAtLastError. 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/x86_64-linux-gnu/libcuda.so.1 [0x377f93]
+=========     Host Frame:./parallel [0x61da3]
+=========     Host Frame:./parallel [0x11414]
+=========     Host Frame:./parallel [0xfb41]
+=========     Host Frame:./parallel [0xf1e6]
+=========     Host Frame:./parallel [0xe76c]
+=========     Host Frame:./parallel [0xd887]
+=========     Host Frame:./parallel [0x9209]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xe7) [0x21b97]
+=========     Host Frame:./parallel [0x824a]
+=========
+========= Error: process didn't terminate successfully
+========= No CUDA-MEMCHECK results found

@@ -12,6 +12,14 @@
 #include <utility>
 #include <iostream> 
 
+// row_ptr:
+// 0 0 2 6 10 13 16 
+// col_index:
+// 2 3 1 3 4 5 1 2 4 5 2 3 5 2 3 4 
+// row_index:
+// 1 1 2 2 2 2 3 3 3 3 4 4 4 5 5 5 
+
+
 __global__ static void count_triangle(int32_t *triangleCount, //!< per-edge triangle counts
                                       const int32_t *const edgeSrc,         //!< node ids for edge srcs
                                       const int32_t *const edgeDst,         //!< node ids for edge dsts
@@ -19,11 +27,11 @@ __global__ static void count_triangle(int32_t *triangleCount, //!< per-edge tria
                                       const int32_t numEdges                  //!< how many edges to count triangles for
 ) {
   int32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
+  
   for(int32_t i = idx; i < numEdges; i += blockDim.x * gridDim.x) {
     // Determine the source and destination node for the edge
-    int32_t u = edgeSrc[idx];
-    int32_t v = edgeDst[idx];
+    int32_t u = edgeSrc[i];
+    int32_t v = edgeDst[i];
 
     // Use the row pointer array to determine the start and end of the neighbor list in the column index array
     int32_t u_ptr = rowPtr[u];
@@ -34,19 +42,28 @@ __global__ static void count_triangle(int32_t *triangleCount, //!< per-edge tria
 
     int32_t w1 = edgeDst[u_ptr];
     int32_t w2 = edgeDst[v_ptr];
+    // printf("idx %d = %d * %d + %d, u:%d, v:%d, u_ptr:%d, v_ptr:%d, u_end:%d, v_end:%d, w1:%d, w2:%d\n", i, blockIdx.x, blockDim.x, threadIdx.x, u, v, u_ptr, v_ptr, u_end, v_end, w1, w2);
 
     // Determine how many elements of those two arrays are common
     while ((u_ptr < u_end) && (v_ptr < v_end)) {
       if (w1 < w2) {
-        w1 = edgeDst[++u_ptr];
+        u_ptr++;
+        if (u_ptr < u_end) 
+          w1 = edgeDst[u_ptr];
       } else if (w1 > w2) {
-        w2 = edgeDst[++v_ptr];
+        v_ptr++;
+        if (v_ptr < v_end) 
+          w2 = edgeDst[v_ptr];
       } else {
-        atomicAdd(triangleCount+idx, 1);
+        atomicAdd(triangleCount+i, 1);
         atomicAdd(triangleCount+u_ptr, 1);
         atomicAdd(triangleCount+v_ptr, 1);
-        w1 = edgeDst[++u_ptr];
-        w2 = edgeDst[++v_ptr];
+        u_ptr++;
+        v_ptr++;
+        if (u_ptr < u_end) 
+          w1 = edgeDst[u_ptr];
+        if (v_ptr < v_end) 
+          w2 = edgeDst[v_ptr];
       }
     }
   }
@@ -80,9 +97,13 @@ __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge tr
     // Determine how many elements of those two arrays are common
     while ((u_ptr < u_end) && (v_ptr < v_end)) {
       if (w1 < w2) {
-        w1 = edgeDst[++u_ptr];
+        u_ptr++;
+        if (u_ptr < u_end) 
+          w1 = edgeDst[u_ptr];
       } else if (w1 > w2) {
-        w2 = edgeDst[++v_ptr];
+        v_ptr++;
+        if (v_ptr < v_end) 
+          w2 = edgeDst[v_ptr];
       } else {
         int32_t local_offset=atomicAdd(triangleOffCounts+i,1);
         triangleBuffers1[local_offset]=u_ptr;
@@ -93,8 +114,12 @@ __global__ static void write_triangle(int32_t *triangleOffsets, //!< per-edge tr
         int32_t v_offset=atomicAdd(triangleOffCounts+v_ptr,1);
         triangleBuffers1[v_offset]=u_ptr;
         triangleBuffers2[v_offset]=i;
-        w1 = edgeDst[++u_ptr];
-        w2 = edgeDst[++v_ptr];
+        u_ptr++;
+        v_ptr++;
+        if (u_ptr < u_end) 
+          w1 = edgeDst[u_ptr];
+        if (v_ptr < v_end) 
+          w2 = edgeDst[v_ptr];
       }
     }
   }
@@ -227,6 +252,21 @@ int main(int argc, char * argv[]) {
   // vector<vector<pair<int32_t, int32_t>>> triangleList(numEdges); // keep track of the triangle edges for each edge
   std::cout << "numEdges from nnz: " << numEdges << std::endl;
 
+    // std::cout << "row_ptr:" << std::endl;
+    // for (uint64_t i = 0; i <= test_view.num_rows(); ++i)
+    //     std::cout << *(test_view.row_ptr()+i) << ' '; 
+    // std::cout << std::endl;
+
+    // std::cout << "col_index:" << std::endl;
+    // for (auto it = coo_test.colInd_.begin(); it != coo_test.colInd_.end(); it++) 
+    //     std::cout << *it << ' ';
+    // std::cout << std::endl;
+
+    // std::cout << "row_index:" << std::endl;
+    // for (auto it = coo_test.rowInd_.begin(); it != coo_test.rowInd_.end(); it++) 
+    //     std::cout << *it << ' ';
+    // std::cout << std::endl;
+
   cudaEvent_t start_total, stop_total;
   cudaEventCreate(&start_total);
   cudaEventCreate(&stop_total);
@@ -266,7 +306,7 @@ int main(int argc, char * argv[]) {
 	cudaMemcpy(edgeDst_device, test_view.col_ind(), numEdges*sizeof(int32_t),cudaMemcpyHostToDevice);
 	cudaMemcpy(rowPtr_device, test_view.row_ptr(), (numRows+1)*sizeof(int32_t),cudaMemcpyHostToDevice);
   //call triangle_count
-  dim3 dimBlock(512);
+  dim3 dimBlock(64);
   dim3 dimGrid (ceil(numEdges * 1.0 / dimBlock.x));
 
   cudaEvent_t start, stop;
@@ -281,13 +321,14 @@ int main(int argc, char * argv[]) {
   milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
   std::cout << "TC time: " << milliseconds << " ms" << std::endl;
-  /*std::cout << "Triangle Count" << std::endl;
+
+  std::cout << "Triangle Count" << std::endl;
 	int32_t totalCount = 0;
 	for (int32_t i = 0; i < numEdges; ++i) {
-		std::cout << triangleCount[i] << ' ';
+		// std::cout << triangleCount[i] << ' ';
 		totalCount += triangleCount[i];
-	}*/
-  //std::cout << "totalCount: " << totalCount << std::endl;
+	}
+  std::cout << "totalCount: " << totalCount << std::endl;
 
   thrust::device_ptr<int32_t> triangleCount_ptr(triangleCount);
   triangleOffsets[0]=0;
@@ -380,12 +421,19 @@ int main(int argc, char * argv[]) {
   // std::cout << "totalCount: " << totalCount << std::endl;
 
   std::cout << "kmax = " << (k-1) << std::endl;
-  
+
   cudaFree(edgeSrc_device);
   cudaFree(edgeDst_device);
   cudaFree(rowPtr_device);
   cudaFree(triangleCount);
   cudaFree(triangleOffsets);
+  cudaFree(triangleOffCounts);
+  cudaFree(triangleRemove);
+  cudaFree(edge_exists);
+  cudaFree(new_deletes);
+  cudaFree(edgeRemove);
+  cudaFree(triangleBuffers1);
+  cudaFree(triangleBuffers2);
 
   cudaEventRecord(stop_total);
   cudaEventSynchronize(stop_total);
