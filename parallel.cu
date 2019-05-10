@@ -2,15 +2,18 @@
 #include <list>
 #include <cassert>
 #include <algorithm>
+#include <utility>
+#include <iostream> 
+#include <chrono>
 #include "util.cpp"
 #include "edge_list_file.hpp"
 #include "coo-impl.hpp"
-#include <chrono>
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
+#include <thrust/sort.h>
 #include <thrust/copy.h>
-#include <utility>
-#include <iostream> 
+#include <thrust/binary_search.h>
+#include <thrust/iterator/counting_iterator.h>
 
 // row_ptr:
 // 0 0 2 6 10 13 16 
@@ -154,11 +157,11 @@ __global__ static void truss_decompose(int32_t* edgeRemove,
     }
     else if (my_triangle_count>(0)) {
       local_edge_exists=1;
-      edgeRemove[i]=0;
+      // edgeRemove[i]=0;
     } 
-    // else {
-    //   edgeRemove[i] = 2;
-    // }
+    else {
+      edgeRemove[i] = 2;
+    }
   }
   atomicCAS(edge_exists,0,local_edge_exists);
   atomicCAS(new_deletes,0,local_new_deletes);
@@ -271,6 +274,7 @@ int main(int argc, char * argv[]) {
   int32_t* edgeDst_device = nullptr;
 	int32_t* rowPtr_device = nullptr;
 	int32_t* triangleCount = nullptr;
+	int32_t* triangleCount_sorted = nullptr;
   int32_t* triangleOffsets = nullptr;
   int32_t* triangleOffCounts = nullptr;
   int32_t* triangleBuffers1 = nullptr;
@@ -279,7 +283,6 @@ int main(int argc, char * argv[]) {
   int32_t* edgeRemove = nullptr;
   int* edge_exists = nullptr;
   int* new_deletes = nullptr;
-  int k=2;
 
 
 	//allocate necessary memory
@@ -287,6 +290,7 @@ int main(int argc, char * argv[]) {
 	cudaMalloc(&edgeDst_device, numEdges*sizeof(int32_t));
 	cudaMalloc(&rowPtr_device, (numRows+1)*sizeof(int32_t));
 	cudaMallocManaged(&triangleCount, numEdges*sizeof(int32_t));
+	cudaMallocManaged(&triangleCount_sorted, numEdges*sizeof(int32_t));
   cudaMallocManaged(&triangleOffsets, (numEdges+1)*sizeof(int32_t));
   cudaMallocManaged(&triangleOffCounts, (numEdges+1)*sizeof(int32_t));
   
@@ -324,6 +328,35 @@ int main(int argc, char * argv[]) {
   thrust::device_ptr<int32_t> triangleOffCounts_ptr(triangleOffCounts);
   thrust::copy(triangleOffsets_ptr,triangleOffsets_ptr+numEdges+1,triangleOffCounts_ptr);
   
+  // get the histogram of triangleCount. reference: https://github.com/thrust/thrust/blob/master/examples/histogram.cu
+  thrust::device_ptr<int32_t> triangleCount_sorted_ptr(triangleCount_sorted);
+  thrust::copy(triangleCount_ptr,triangleCount_ptr+numEdges,triangleCount_sorted_ptr);
+  thrust::sort(triangleCount_sorted_ptr, triangleCount_sorted_ptr+numEdges);
+  int32_t num_bins = triangleCount_sorted[numEdges-1] + 1;
+  thrust::device_vector<int32_t> histogram(num_bins);
+  thrust::counting_iterator<int32_t> search_begin(0);
+  thrust::upper_bound(triangleCount_sorted_ptr, triangleCount_sorted_ptr+numEdges, search_begin, search_begin + num_bins, histogram.begin());
+  
+  // std::cout << "Histogramming" << std::endl;
+  // for (int i = 0; i < num_bins; ++i) {
+  //   std::cout << i << ' ';
+  // }
+  // std::cout <<std::endl;
+  // for (int i = 0; i < num_bins; ++i) {
+  //   std::cout << histogram[i] << ' ';
+  // }
+  // std::cout <<std::endl;
+
+  // compute the histogram by taking differences of the cumulative histogram
+  thrust::adjacent_difference(histogram.begin(), histogram.end(), histogram.begin());
+
+  // for (int i = 0; i < num_bins; ++i) {
+  //   std::cout << histogram[i] << ' ';
+  // }
+  // std::cout <<std::endl;
+
+  cudaFree(triangleCount_sorted);
+
   cudaMallocManaged(&triangleBuffers1,triangleOffsets[numEdges]*sizeof(int32_t));
   cudaMallocManaged(&triangleBuffers2,triangleOffsets[numEdges]*sizeof(int32_t));
   write_triangle<<<dimGrid, dimBlock>>>(triangleOffsets, triangleOffCounts, triangleBuffers1, triangleBuffers2, edgeSrc_device, edgeDst_device, rowPtr_device, numEdges);
@@ -353,59 +386,112 @@ int main(int argc, char * argv[]) {
   cudaMallocManaged(&triangleRemove, numEdges*sizeof(int32_t));
   cudaMallocManaged(&edge_exists, sizeof(int));
   cudaMallocManaged(&new_deletes, sizeof(int));
-
-  *edge_exists=1;
-  *new_deletes=0;
   
   // initialize all edgeRemove to 0
-  // thrust::device_ptr<int32_t> edgeRemove_ptr(edgeRemove);
-  // thrust::fill(edgeRemove_ptr,edgeRemove_ptr+numEdges,0);
-  // cudaDeviceSynchronize();
-  int32_t roundRemove = 0;
-  int32_t edgeLeft = 0;
-  
-  while (*edge_exists) {
-    if (*new_deletes==0) {
-      edgeLeft = 0;
-      for (int i = 0; i < numEdges; ++i) {
-        if (!edgeRemove[i]) {
-          edgeLeft++;
-        }
-      }
-      // std::cout << "k=" << k << '\t' << "iter=" << roundRemove << '\t' << "\tTrianglesLeft: " << thrust::reduce(triangleCount_ptr,triangleCount_ptr+numEdges,0) << "\tEdgesleft: " << edgeLeft << std::endl;
-      ++k;
+  thrust::device_ptr<int32_t> edgeRemove_ptr(edgeRemove);
+  thrust::fill(edgeRemove_ptr,edgeRemove_ptr+numEdges,0);
 
-      // std::cout << "Triangle Write when k=" << k-1 << std::endl;
-      // int32_t scan_count = 1;
-      // std::cout << "0: " << triangleCount[0] << "\t";
-      // for (int32_t i = 0; i < triangleOffsets[numEdges]; ++i) {
-      //   if (i < triangleOffsets[scan_count]) {
-      //     std::cout << triangleBuffers1[i] << ":" << triangleBuffers2[i] << '\t';
-      //   } else {
-      //     std::cout << std::endl << scan_count << ": " << triangleCount[scan_count] << "\t";
-      //     scan_count++;
-      //   }
-      // }
-      // std::cout << std::endl;
-      
-      roundRemove = 0;
+  // get copy of edgeRemove, triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, edge_exists, new_deletes, numEdges, k
+  int32_t* edgeRemove_copy = nullptr;
+  int32_t* triangleCount_copy = nullptr;
+  int32_t* triangleOffsets_copy = nullptr;
+  int32_t* triangleBuffers1_copy = nullptr;
+  int32_t* triangleBuffers2_copy = nullptr;
+  
+  cudaMallocManaged(&edgeRemove_copy, numEdges*sizeof(int32_t));
+  cudaMallocManaged(&triangleCount_copy, numEdges*sizeof(int32_t));
+  cudaMallocManaged(&triangleOffsets_copy, (numEdges+1)*sizeof(int32_t));
+  cudaMallocManaged(&triangleBuffers1_copy, triangleOffsets[numEdges]*sizeof(int32_t));
+  cudaMallocManaged(&triangleBuffers2_copy, triangleOffsets[numEdges]*sizeof(int32_t));
+  
+  cudaMemcpy(edgeRemove_copy, edgeRemove, numEdges*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+  cudaMemcpy(triangleCount_copy, triangleCount, numEdges*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+  cudaMemcpy(triangleOffsets_copy, triangleOffsets, (numEdges+1)*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+  cudaMemcpy(triangleBuffers1_copy, triangleBuffers1, triangleOffsets[numEdges]*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+  cudaMemcpy(triangleBuffers2_copy, triangleBuffers2, triangleOffsets[numEdges]*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+
+  
+  int32_t k_high = num_bins - 1;
+  while (!histogram[k_high] || histogram[k_high]<(k_high/3+2)) {
+    k_high--;
+  }
+  k_high = k_high/3 + 2;
+  std::cout << "k_high = " << k_high << std::endl;
+  int32_t k_low = 2;
+  int32_t k = (k_high+k_low) >> 1;
+  int32_t rounds = 0;
+
+  std::cout << "Init k = " << k << std::endl;
+  while (k != k_low) {
+    rounds++;
+    *edge_exists=1;
+    *new_deletes=1;
+    while (*edge_exists==1 && *new_deletes==1) {
+      *edge_exists=0;
+      *new_deletes=0;
+      thrust::device_ptr<int32_t> triangleRemove_ptr(triangleRemove);
+      thrust::fill(triangleRemove_ptr,triangleRemove_ptr+numEdges,0);
+      cudaDeviceSynchronize();
+      truss_decompose<<<dimGrid, dimBlock>>>(edgeRemove_copy, triangleCount_copy, triangleOffsets_copy, triangleRemove, triangleBuffers1_copy, triangleBuffers2_copy, edge_exists, new_deletes, numEdges, k);
+      cudaDeviceSynchronize();
+      adjust_remove<<<dimGrid, dimBlock>>>(edgeRemove_copy, triangleOffsets_copy, triangleBuffers1_copy, triangleBuffers2_copy, triangleRemove, numEdges);
+      cudaDeviceSynchronize();
+
+      if (*new_deletes==1) {
+        update_triangles<<<dimGrid, dimBlock>>>(triangleCount_copy, triangleOffsets_copy, triangleRemove, triangleBuffers1_copy, triangleBuffers2_copy, numEdges);
+      cudaDeviceSynchronize();
+      }
     }
+
+    // if new_deletes is 0 and edge_exists is 1, that means no more edges will be deleted, and there are edges still existing, so increase k.
+    if (*new_deletes==0 && *edge_exists==1) {
+      std::cout << "new_deletes: " << *new_deletes << "; edge_exists: " << *edge_exists << std::endl;
+      std::cout << "Current k is the new lower bound. k = " << k << std::endl;
+      k_low = k;
+      std::cout << "k_high: " << k_high << ", k_low: " << k_low << std::endl;
+      cudaMemcpy(edgeRemove, edgeRemove_copy, numEdges*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleCount, triangleCount_copy, numEdges*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleOffsets, triangleOffsets_copy, (numEdges+1)*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleBuffers1, triangleBuffers1_copy, triangleOffsets[numEdges]*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleBuffers2, triangleBuffers2_copy, triangleOffsets[numEdges]*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+    } else if (*edge_exists==0) {  // meaning no edge exists in the graph, current k too big.
+      std::cout << "new_deletes: " << *new_deletes << "; edge_exists: " << *edge_exists << std::endl;
+      std::cout << "Current k is the new higher bound. k = " << k << std::endl;
+      k_high = k;
+      std::cout << "k_high: " << k_high << ", k_low: " << k_low << std::endl;
+      cudaMemcpy(edgeRemove_copy, edgeRemove, numEdges*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleCount_copy, triangleCount, numEdges*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleOffsets_copy, triangleOffsets, (numEdges+1)*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleBuffers1_copy, triangleBuffers1, triangleOffsets[numEdges]*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+      cudaMemcpy(triangleBuffers2_copy, triangleBuffers2, triangleOffsets[numEdges]*sizeof(int32_t), cudaMemcpyDeviceToDevice);
+    }
+
+    k = (k_high+k_low) >> 1;
+    std::cout << "next k = " << k << std::endl;
+  }
+
+  k++;
+  rounds++;
+  *edge_exists=1;
+  *new_deletes=1;
+  while (*edge_exists==1 && *new_deletes==1) {
     *edge_exists=0;
     *new_deletes=0;
-    roundRemove++;
     thrust::device_ptr<int32_t> triangleRemove_ptr(triangleRemove);
     thrust::fill(triangleRemove_ptr,triangleRemove_ptr+numEdges,0);
     cudaDeviceSynchronize();
-    truss_decompose<<<dimGrid, dimBlock>>>(edgeRemove, triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, edge_exists, new_deletes, numEdges, k);
+    truss_decompose<<<dimGrid, dimBlock>>>(edgeRemove_copy, triangleCount_copy, triangleOffsets_copy, triangleRemove, triangleBuffers1_copy, triangleBuffers2_copy, edge_exists, new_deletes, numEdges, k);
     cudaDeviceSynchronize();
-    adjust_remove<<<dimGrid, dimBlock>>>(edgeRemove, triangleOffsets, triangleBuffers1, triangleBuffers2, triangleRemove,numEdges);
+    adjust_remove<<<dimGrid, dimBlock>>>(edgeRemove_copy, triangleOffsets_copy, triangleBuffers1_copy, triangleBuffers2_copy, triangleRemove, numEdges);
     cudaDeviceSynchronize();
 
     if (*new_deletes==1) {
-      update_triangles<<<dimGrid, dimBlock>>>(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, numEdges);
-      //update_triangles_cpu(triangleCount, triangleOffsets, triangleRemove, triangleBuffers1, triangleBuffers2, numEdges);
+      update_triangles<<<dimGrid, dimBlock>>>(triangleCount_copy, triangleOffsets_copy, triangleRemove, triangleBuffers1_copy, triangleBuffers2_copy, numEdges);
     cudaDeviceSynchronize();
     }
+  }
+  if (*edge_exists == 0) {
+    k--;
   }
 
   cudaEventRecord(stop);
@@ -413,7 +499,13 @@ int main(int argc, char * argv[]) {
   milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
   std::cout << "k truss time: " << milliseconds << " ms" << std::endl;
-  std::cout << "kmax = " << (k-1) << std::endl;
+  std::cout << "kmax = " << (k) << "; rounds: " << rounds << std::endl;
+
+  cudaFree(edgeRemove_copy);
+  cudaFree(triangleCount_copy);
+  cudaFree(triangleOffsets_copy);
+  cudaFree(triangleBuffers1_copy);
+  cudaFree(triangleBuffers2_copy);
 
   cudaFree(triangleCount);
   cudaFree(triangleOffsets);
